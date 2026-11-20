@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Print Tracker</title>
+<script>try{const t=localStorage.getItem("pt-theme"); if(t==="light"||t==="dark") document.documentElement.dataset.theme=t;}catch(e){}</script>
 <style>
 :root{
   color-scheme: light;
@@ -14,7 +15,7 @@
   --flash:#dcebfd;
 }
 @media (prefers-color-scheme: dark){
-  :root{
+  :root:not([data-theme="light"]){
     color-scheme: dark;
     --page:#0d0d0d; --surface:#1a1a19; --surface-2:#242422;
     --ink:#f0efec; --ink-2:#c3c2b7; --muted:#898781; --line:#2c2c2a; --ring:rgba(255,255,255,.10);
@@ -23,6 +24,20 @@
     --flash:#1c3352;
   }
 }
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --page:#0d0d0d; --surface:#1a1a19; --surface-2:#242422;
+  --ink:#f0efec; --ink-2:#c3c2b7; --muted:#898781; --line:#2c2c2a; --ring:rgba(255,255,255,.10);
+  --accent:#3987e5; --accent-ink:#fff;
+  --bw:#c3c2b7; --col:#eb6834; --good:#0ca30c; --bad:#e66767; --warn:#fab219;
+  --flash:#1c3352;
+}
+:root[data-theme="light"]{ color-scheme: light; }
+:root:not([data-theme="dark"]) .card{box-shadow:0 1px 2px rgba(20,20,10,.04),0 2px 8px rgba(20,20,10,.04)}
+table.inner{width:100%;background:var(--surface-2);border-radius:8px;font-size:12.5px}
+table.inner th,table.inner td{border-bottom:1px solid var(--line);padding:6px 8px}
+tr.billrow:hover td{background:var(--surface-2)}
+.theme{display:inline-flex;margin-left:8px}
 *{box-sizing:border-box}
 body{margin:0;background:var(--page);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
 .wrap{max-width:1280px;margin:0 auto;padding:18px 20px 60px}
@@ -122,12 +137,17 @@ section>.card,section>.two{margin-bottom:14px}
         <span id="since" class="mut"></span>
       </div>
     </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <div class="seg theme" id="theme" title="Light / dark">
+      <button data-th="auto">Auto</button><button data-th="light">☀ Light</button><button data-th="dark">☾ Dark</button>
+    </div>
     <div class="tabs" id="tabs">
       <button data-t="D" aria-pressed="true">Dashboard</button>
       <button data-t="S" aria-pressed="false">Purchases &amp; stock</button>
       <button data-t="J" aria-pressed="false">Offset jobs</button>
       <button data-t="E" aria-pressed="false">Expenses</button>
       <button data-t="P" aria-pressed="false">Pricing &amp; settings</button>
+    </div>
     </div>
   </header>
 
@@ -204,11 +224,11 @@ section>.card,section>.two{margin-bottom:14px}
   <section id="viewS" hidden>
     <div class="card">
       <h3 id="purTitle">Add a purchase</h3>
-      <div class="hint">One supplier bill can have several lines — e.g. A4 packets, Legal masters and 12x18 masters together. Enter the amount for each line as on the bill. A4 is usually 500 sheets per packet, masters 100. Bought a few single sheets? Choose “Loose sheets”.</div>
+      <div class="hint">Each bill gets the next number by itself. One supplier bill can have several lines — e.g. A4 packets, Legal masters and 12x18 masters together. Enter the amount for each line as on the bill. A4 is usually 500 sheets per packet, masters 100. Bought a few single sheets? Choose “Loose sheets”.</div>
       <form class="form" id="fPur">
         <label>Date<input type="date" name="date"></label>
         <label>Supplier<input name="supplier" placeholder="Supplier name"></label>
-        <label>Bill no.<input name="bill_no" placeholder="optional"></label>
+        <label>Bill no. <span class="mut" style="font-weight:400">(automatic)</span><input name="bill_no" id="purBill"></label>
         <label>Paid from<select name="paid_by"><option value="business">Business money</option><option value="owner">My own money</option></select></label>
         <label>Note<input name="note"></label>
       </form>
@@ -393,7 +413,7 @@ const fmtT=t=>new Date(t*1000).toLocaleString("en-IN",{day:"numeric",month:"shor
 const fmtD=t=>new Date(t*1000).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"});
 const isoD=t=>{const d=t?new Date(t*1000):new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");};
 const sign=n=>n<0?"neg":(n>0?"pos":"");
-let range="today", S=null, prevPages={}, prevGroupPages={}, ratesDirty=false, builtRates=false, selOpen=false, pendingDel=null, openGroup=null;
+let range="today", S=null, prevPages={}, prevGroupPages={}, ratesDirty=false, builtRates=false, selOpen=false, pendingDel=null, openGroup=null, openBill=new Set();
 let openJob=null, lastSaved=null, pnlOpen=new Set();
 function round2(x){ return Math.round(x*100)/100; }
 
@@ -657,11 +677,25 @@ function render(){
 
   // purchases & stock
   if(!purLines.length){ purLines.push(newLine()); drawLines(); }
+  if(!purEdit && document.activeElement!==$("purBill") && ($("purBill").dataset.auto!=="0")) $("purBill").value=S.next_bill;
   $("stock").innerHTML=`<thead><tr><th>Paper</th><th class="num">Bought (sheets)</th><th class="num">Paid</th><th class="num">Avg cost / sheet</th><th class="num">Used</th><th class="num">Stock left</th></tr></thead><tbody>`+
     S.papers.map(x=>`<tr><td>${esc(x.label)}</td><td class="num">${INT(x.bought)}</td><td class="num">${INR(x.bought_cost)}</td><td class="num">${costTxt(x)}</td><td class="num">${INT(x.used_total)}</td><td class="num">${stockTxt(x)}</td></tr>`).join("")+"</tbody>";
   const pl={}; S.papers.forEach(x=>pl[x.key]=x.label);
-  $("purList").innerHTML=S.purchases.length?`<thead><tr><th>Date</th><th>Paper</th><th>Supplier</th><th class="num">Packets</th><th class="num">Sheets</th><th class="num">Paid</th><th class="num">Per sheet</th><th></th></tr></thead><tbody>`+
-    S.purchases.map(x=>`<tr><td>${fmtD(x.ts)}</td><td>${esc(pl[x.paper]||x.paper)}<div class="mut">${esc(x.note||"")}</div></td><td>${esc(x.supplier||"")}${x.bill_no||x.paid_by==="owner"?`<div class="mut">${x.bill_no?"Bill "+esc(x.bill_no):""}${x.bill_no&&x.paid_by==="owner"?" · ":""}${x.paid_by==="owner"?"your own money":""}</div>`:""}</td><td class="num">${x.loose?"loose":x.packets+" × "+INT(x.sheets_per_packet)}</td><td class="num">${INT(x.sheets)}</td><td class="num">${INR(x.total_cost)}</td><td class="num">${INR(x.per_sheet)}</td><td style="white-space:nowrap"><button class="linkbtn" data-pedit="${x.id}">Edit</button>${delCell("purchase",x.id)}</td></tr>`).join("")+"</tbody>"
+  const bills=[], bmap={};
+  S.purchases.forEach(x=>{ const k=x.bill_no?"b"+x.bill_no:"p"+x.id;
+    if(!bmap[k]){ bmap[k]={k,bill:x.bill_no,ts:x.ts,supplier:x.supplier,owner:false,lines:[],total:0}; bills.push(bmap[k]); }
+    const b=bmap[k]; b.lines.push(x); b.total+=x.total_cost; if(x.paid_by==="owner") b.owner=true; if(x.ts>b.ts) b.ts=x.ts; });
+  $("purList").innerHTML=bills.length?`<thead><tr><th>Bill</th><th>Date</th><th>Supplier</th><th>Items</th><th class="num">Total</th><th></th></tr></thead><tbody>`+
+    bills.map(b=>{ const open=openBill.has(b.k), sum=b.lines.map(l=>pl[l.paper]||l.paper);
+      return `<tr class="billrow" data-bill="${b.k}" style="cursor:pointer"><td style="white-space:nowrap"><i class="car" style="margin-left:0;font-style:normal">${open?"▾":"▸"}</i> <b>${b.bill?esc(b.bill):"—"}</b></td>
+        <td style="white-space:nowrap">${fmtD(b.ts)}</td><td>${esc(b.supplier||"")}${b.owner?`<div class="mut">your own money</div>`:""}</td>
+        <td>${b.lines.length} item${b.lines.length>1?"s":""}<div class="mut">${esc([...new Set(sum)].join(", "))}</div></td>
+        <td class="num"><b>${INR(b.total)}</b></td>
+        <td style="white-space:nowrap"><button class="linkbtn" data-pedit="${b.lines[0].id}">Edit</button>${b.bill?delCell("purchase_bill",b.bill):delCell("purchase",b.lines[0].id)}</td></tr>`+
+      (open?`<tr class="billdet"><td></td><td colspan="5" style="padding:0 8px 10px"><table class="inner"><thead><tr><th>Paper</th><th class="num">Packets</th><th class="num">Sheets</th><th class="num">Paid</th><th class="num">Per sheet</th></tr></thead><tbody>`+
+        b.lines.slice().reverse().map(x=>`<tr><td>${esc(pl[x.paper]||x.paper)}${x.note?`<div class="mut">${esc(x.note)}</div>`:""}</td><td class="num">${x.loose?"loose":x.packets+" × "+INT(x.sheets_per_packet)}</td><td class="num">${INT(x.sheets)}</td><td class="num">${INR(x.total_cost)}</td><td class="num">${INR(x.per_sheet)}</td></tr>`).join("")+
+        `</tbody></table></td></tr>`:"");
+    }).join("")+"</tbody>"
     :`<tbody><tr><td class="empty">No purchases entered yet.</td></tr></tbody>`;
 
   // jobs
@@ -740,7 +774,7 @@ $("log").addEventListener("change",e=>{
 document.addEventListener("click",e=>{
   const b=e.target.closest("[data-del]");
   if(b){
-    if(b.dataset.yes){ const [kind,id]=b.dataset.del.split(":"); pendingDel=null; post("/api/delete",{kind,id:+id}); }
+    if(b.dataset.yes){ const [kind,id]=b.dataset.del.split(":"); pendingDel=null; post("/api/delete",kind==="purchase_bill"?{kind,bill_no:id}:{kind,id:+id}); }
     else { pendingDel=b.dataset.del||null; render(); }
     return;
   }
@@ -770,6 +804,8 @@ document.addEventListener("click",e=>{
   if(ce){ const c=S.capital.find(y=>y.id===+ce.dataset.cedit); if(!c) return; const f=$("fCap");
     f.elements.id.value=c.id; f.elements.date.value=isoD(c.ts); f.elements.kind.value=c.kind; f.elements.amount.value=c.amount; f.elements.note.value=c.note||"";
     $("capSave").textContent="Save changes"; $("capCancel").hidden=false; return; }
+  const br=e.target.closest("[data-bill]");
+  if(br && !e.target.closest("button")){ const k=br.dataset.bill; openBill.has(k)?openBill.delete(k):openBill.add(k); render(); return; }
   const pe=e.target.closest("[data-pedit]");
   if(pe){ purStartEdit(+pe.dataset.pedit); return; }
   const ed=e.target.closest("[data-edit]");
@@ -788,7 +824,7 @@ function resetForm(f){ f.reset(); f.elements.date.value=isoD(); }
 let purLines=[];
 const newLine=(paper)=>({paper:paper||"a4",mode:"packet",packets:1,spp:/master/.test(paper||"a4")?100:500,loose:"",cost:""});
 let purEdit=null;   // ids of the saved lines being edited
-function purDone(){ resetForm($("fPur")); purLines=[newLine()]; purEdit=null; $("purTitle").textContent="Add a purchase"; $("purSave").textContent="Save bill"; $("purCancel").hidden=true; $("purErr").textContent=""; drawLines(); }
+function purDone(){ resetForm($("fPur")); $("purBill").dataset.auto=""; $("purBill").value=S?S.next_bill:""; purLines=[newLine()]; purEdit=null; $("purTitle").textContent="Add a purchase"; $("purSave").textContent="Save bill"; $("purCancel").hidden=true; $("purErr").textContent=""; drawLines(); }
 function purStartEdit(id){
   const x=S.purchases.find(p=>p.id===id); if(!x) return;
   // the whole bill when it has a bill number, otherwise just this line
@@ -828,6 +864,12 @@ $("purLines").addEventListener("input",e=>{
 });
 $("purLines").addEventListener("click",e=>{ const b=e.target.closest("[data-rm]"); if(b){ purLines.splice(+b.dataset.rm,1); drawLines(); } });
 $("purCancel").onclick=purDone;
+$("purBill").addEventListener("input",()=>$("purBill").dataset.auto="0");
+function setTheme(t){ if(t==="auto") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme=t;
+  try{ localStorage.setItem("pt-theme",t); }catch(e){}
+  document.querySelectorAll("#theme button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.th===t))); }
+document.querySelectorAll("#theme button").forEach(b=>b.onclick=()=>setTheme(b.dataset.th));
+setTheme((()=>{ try{ return localStorage.getItem("pt-theme")||"auto"; }catch(e){ return "auto"; } })());
 $("purAddLine").onclick=()=>{ purLines.push(newLine()); drawLines(); const sel=$("purLines").querySelectorAll("tbody tr"); sel[sel.length-1].querySelector("select").focus(); };
 $("purSave").onclick=async()=>{
   const d=formData($("fPur"));

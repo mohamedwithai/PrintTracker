@@ -178,6 +178,17 @@ def db_init():
             _db.execute("ALTER TABLE purchases ADD COLUMN paid_by TEXT DEFAULT 'business'")
             # the owner said bill 01 was bought with his own money
             _db.execute("UPDATE purchases SET paid_by='owner' WHERE bill_no='01'")
+        if not _db.execute("SELECT 1 FROM kv WHERE k='bills_numbered'").fetchone():
+            # give every older purchase (no bill no.) a number: one per date + supplier
+            nxt = _next_bill()
+            groups = {}
+            for r in _db.execute("SELECT id, ts, supplier FROM purchases WHERE IFNULL(bill_no,'')='' ORDER BY ts, id"):
+                key = (datetime.fromtimestamp(r["ts"]).date(), r["supplier"] or "")
+                if key not in groups:
+                    groups[key] = nxt
+                    nxt = "%0*d" % (len(nxt), int(nxt) + 1)
+                _db.execute("UPDATE purchases SET bill_no=? WHERE id=?", (groups[key], r["id"]))
+            _db.execute("INSERT INTO kv(k,v) VALUES('bills_numbered','true')")
         # the printer's "Other (Double)" counter (12x18 masters) ticks twice per sheet;
         # halve rows recorded before this was known (once)
         if not _db.execute("SELECT 1 FROM kv WHERE k='oth2_halved'").fetchone():
@@ -190,6 +201,17 @@ def db_init():
         for k in PAPER_KEYS:
             _db.execute("INSERT OR IGNORE INTO paper_rates(paper, rate) VALUES(?, 0)", (k,))
         _db.commit()
+
+
+def _next_bill():
+    """Next purchase bill number: highest number used so far + 1, same width (01, 02 ...)."""
+    best, width = 0, 2
+    with _db_lock:
+        rows = _db.execute("SELECT bill_no FROM purchases WHERE IFNULL(bill_no,'')<>''").fetchall()
+    for (b,) in rows:
+        if str(b).isdigit() and int(b) >= best:
+            best, width = int(b), max(width, len(str(b)))
+    return "%0*d" % (width, best + 1)
 
 
 def kv_get(k, default=None):
@@ -913,7 +935,7 @@ def api_state(rng, inner=False):
                      "other2_default": kv_get("other2_default", "master_12x18")},
         "cats": cats, "papers": papers, "total_pages": tp, "pnl": pnl, "scans": int(scans),
         "total_amount": round(tsale, 2), "events": evs,
-        "free_masters": free_masters[:60], "free_prints": free_prints[:25], "purchases": purchases, "jobs": jobs, "expenses": expenses, "recurring": recurring, "capital": capital, "owner": owner,
+        "free_masters": free_masters[:60], "free_prints": free_prints[:25], "purchases": purchases, "jobs": jobs, "expenses": expenses, "recurring": recurring, "capital": capital, "owner": owner, "next_bill": _next_bill(),
     }
 
 
@@ -1012,6 +1034,8 @@ class Handler(BaseHTTPRequestHandler):
             ts, sup, bill, note = _ts(data.get("date")), _txt(data.get("supplier")), _txt(data.get("bill_no"), 60), _txt(data.get("note"))
             by = "owner" if data.get("paid_by") == "owner" else "business"
             with _db_lock:
+                if not bill:
+                    bill = _next_bill()
                 # editing a saved bill: lines with an id are updated, removed lines deleted
                 for rid in data.get("remove_ids") or []:
                     _db.execute("DELETE FROM purchases WHERE id=?", (int(_f(rid)),))
@@ -1140,6 +1164,11 @@ class Handler(BaseHTTPRequestHandler):
                     _db.commit()
             return self._send(200, {"ok": True})
         if path == "/api/delete":
+            if data.get("kind") == "purchase_bill" and _txt(data.get("bill_no")):
+                with _db_lock:
+                    _db.execute("DELETE FROM purchases WHERE bill_no=?", (_txt(data.get("bill_no")),))
+                    _db.commit()
+                return self._send(200, {"ok": True})
             table = {"purchase": "purchases", "job": "jobs", "expense": "expenses", "recurring": "recurring",
                      "job_item": "job_items", "event": "events", "capital": "capital"}.get(data.get("kind"))
             if table:
