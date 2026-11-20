@@ -1,0 +1,6 @@
+print_tracker.db
+print_tracker.db-*
+certificate/
+__pycache__/
+*.zip
+*.bak

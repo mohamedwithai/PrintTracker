@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Print Tracker</title>
+<style>
+:root{
+  color-scheme: light;
+  --page:#f4f3ef; --surface:#fcfcfb; --surface-2:#efeee9;
+  --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781; --line:#e1e0d9; --ring:rgba(11,11,11,.10);
+  --accent:#1c5cab; --accent-ink:#fff;
+  --bw:#52514e; --col:#eb6834; --good:#0ca30c; --bad:#d03b3b; --warn:#b97a00;
+  --flash:#dcebfd;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    color-scheme: dark;
+    --page:#0d0d0d; --surface:#1a1a19; --surface-2:#242422;
+    --ink:#f0efec; --ink-2:#c3c2b7; --muted:#898781; --line:#2c2c2a; --ring:rgba(255,255,255,.10);
+    --accent:#3987e5; --accent-ink:#fff;
+    --bw:#c3c2b7; --col:#eb6834; --good:#0ca30c; --bad:#e66767; --warn:#fab219;
+    --flash:#1c3352;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+.wrap{max-width:1280px;margin:0 auto;padding:18px 20px 60px}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:14px}
+h1{font-size:20px;margin:0;font-weight:650;letter-spacing:-.01em}
+.sub{color:var(--ink-2);font-size:13px;margin-top:3px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--ring);background:var(--surface);border-radius:999px;padding:2px 10px;font-size:12px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.dot.ok{background:var(--good)} .dot.bad{background:var(--bad)} .dot.warn{background:var(--warn)}
+.tabs{display:inline-flex;border:1px solid var(--ring);border-radius:9px;overflow:hidden;background:var(--surface)}
+.tabs button,.seg button{appearance:none;border:0;background:transparent;color:var(--ink-2);padding:8px 14px;font:inherit;cursor:pointer}
+.tabs button[aria-pressed=true]{background:var(--accent);color:var(--accent-ink);font-weight:600}
+.seg{display:inline-flex;border:1px solid var(--ring);border-radius:8px;overflow:hidden;background:var(--surface)}
+.seg button{padding:6px 11px}
+.dt{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--ring);border-radius:7px;padding:5px 7px;color-scheme:light dark}
+#dateBox[hidden]{display:none!important}
+.seg button[aria-pressed=true]{background:var(--surface-2);color:var(--ink);font-weight:600}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:14px}
+.card{background:var(--surface);border:1px solid var(--ring);border-radius:12px;padding:14px 16px}
+.totals{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}
+.k .l{color:var(--ink-2);font-size:12.5px}
+.k .v{font-size:28px;font-weight:650;letter-spacing:-.01em;margin-top:2px}
+.k .n{color:var(--muted);font-size:12px}
+.group{margin-bottom:16px}
+.group h2{font-size:13px;font-weight:650;margin:0 0 8px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.04em}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}
+.tile{position:relative;transition:background .6s}
+.tile.flash{background:var(--flash);transition:none}
+.tile .l{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--ink-2)}
+.sw{width:10px;height:10px;border-radius:3px;display:inline-block;flex:none}
+.sw.bw{background:var(--bw)} .sw.color{background:var(--col)}
+.tile .v{font-size:34px;font-weight:650;letter-spacing:-.02em;line-height:1.15;margin-top:4px}
+.tile .u{font-size:13px;font-weight:500;color:var(--muted);margin-left:4px}
+.tile .m{display:flex;justify-content:space-between;gap:8px;color:var(--muted);font-size:12px;margin-top:4px}
+.tile .m b{color:var(--ink);font-weight:600}
+.tablewrap{max-height:520px;overflow:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--ink-2);font-weight:600;font-size:12px;white-space:nowrap;background:var(--surface)}
+.tablewrap th{position:sticky;top:0}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+tr:last-child td{border-bottom:0}
+.doc{font-weight:560;word-break:break-word}
+.mut{color:var(--muted);font-size:12px}
+select,input[type=number]{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--ring);border-radius:7px;padding:5px 7px}
+td select{max-width:230px;font-size:12.5px}
+.btn{appearance:none;border:1px solid var(--ring);background:var(--surface);color:var(--ink);border-radius:8px;padding:8px 14px;font:inherit;cursor:pointer}
+.btn:hover{background:var(--surface-2)}
+.btn.primary{background:var(--accent);border-color:transparent;color:var(--accent-ink);font-weight:600}
+.btn.danger{color:var(--bad)}
+.hint{color:var(--muted);font-size:12.5px;margin:2px 0 12px}
+.card h3{font-size:15px;margin:0 0 2px;font-weight:640}
+.card h4{font-size:13.5px;margin:0 0 2px;font-weight:640}
+.rates input{width:110px;text-align:right}
+.note{border-left:3px solid var(--warn);background:var(--surface-2);padding:8px 12px;border-radius:6px;font-size:13px;margin-bottom:14px}
+.queue{font-size:13px;margin-bottom:14px}
+.empty{color:var(--muted);padding:26px;text-align:center}
+.saved{color:var(--good);font-size:13px;margin-left:10px;opacity:0;transition:opacity .3s}
+.saved.on{opacity:1}
+[hidden]{display:none!important}
+
+.tabs{flex-wrap:wrap}
+.pnl{display:grid;grid-template-columns:1fr 1fr;gap:0 28px}
+@media (max-width:800px){.pnl{grid-template-columns:1fr}}
+.pnl .r{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--line);font-size:13.5px}
+.pnl .r span:last-child{font-variant-numeric:tabular-nums}
+.pnl .r.t{font-weight:650;border-bottom:0;font-size:15px}
+.pnl .h{font-size:11.5px;font-weight:650;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:14px 0 2px}
+.pnl .r.sub{color:var(--ink-2);padding-left:14px}
+.pnl .r.click{cursor:pointer}
+.pnl .r.click:hover{color:var(--ink)}
+.pnl .car{font-style:normal;display:inline-block;width:14px;margin-left:-14px;color:var(--muted);font-size:11px}
+.pnl .r.det{padding:4px 0 4px 30px;font-size:12.5px;color:var(--ink-2);border-bottom:1px dashed var(--line)}
+.pos{color:var(--good)} .neg{color:var(--bad)}
+.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;align-items:end;margin-bottom:6px}
+.form label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--ink-2)}
+.form input,.form select,.form textarea{width:100%;font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--ring);border-radius:7px;padding:7px 8px}
+.form textarea{resize:vertical;min-height:60px}
+.err{color:var(--bad);font-size:13px;margin-left:10px}
+.linkbtn{appearance:none;border:0;background:none;color:var(--accent);cursor:pointer;font:inherit;font-size:12.5px;padding:0 4px}
+.linkbtn.del{color:var(--bad)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:900px){.two{grid-template-columns:1fr}}
+.card{margin-bottom:0}
+section>.card,section>.two{margin-bottom:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Print Tracker</h1>
+      <div class="sub">
+        <span>Kyocera TASKalfa 2553ci</span>
+        <span class="pill"><span class="dot" id="pDot"></span><span id="pTxt">Connecting…</span></span>
+        <span class="pill"><span class="dot" id="qDot"></span><span id="qTxt">Queue watcher</span></span>
+        <span id="since" class="mut"></span>
+      </div>
+    </div>
+    <div class="tabs" id="tabs">
+      <button data-t="D" aria-pressed="true">Dashboard</button>
+      <button data-t="S" aria-pressed="false">Purchases &amp; stock</button>
+      <button data-t="J" aria-pressed="false">Offset jobs</button>
+      <button data-t="E" aria-pressed="false">Expenses</button>
+      <button data-t="P" aria-pressed="false">Pricing &amp; settings</button>
+    </div>
+  </header>
+
+  <div id="warn" class="note" hidden></div>
+
+  <div class="bar">
+    <div class="seg" id="range">
+      <button data-r="today" aria-pressed="true">Today</button>
+      <button data-r="7">7 days</button>
+      <button data-r="month">This month</button>
+      <button data-r="all">All</button>
+      <button data-r="custom" id="rCustom">Dates…</button>
+    </div>
+    <span id="dateBox" hidden style="display:inline-flex;gap:6px;align-items:center">
+      <input type="date" id="dFrom" class="dt"> <span class="mut">to</span> <input type="date" id="dTo" class="dt">
+      <button class="btn primary" id="dApply" style="padding:6px 12px">Show</button>
+    </span>
+    <span class="mut" id="upd"></span>
+  </div>
+
+  <!-- ================= DASHBOARD ================= -->
+  <section id="viewD">
+    <div class="totals">
+      <div class="card k"><div class="l">Sales</div><div class="v" id="kSales">₹0.00</div><div class="n" id="kSalesN">&nbsp;</div></div>
+      <div class="card k"><div class="l">Gross profit</div><div class="v" id="kGross">₹0.00</div><div class="n">sales − paper − supplier</div></div>
+      <div class="card k"><div class="l">Net profit</div><div class="v" id="kNet">₹0.00</div><div class="n">gross − other expenses</div></div>
+      <div class="card k"><div class="l">Pages printed</div><div class="v" id="tPages">0</div><div class="n" id="tSplit">&nbsp;</div></div>
+    </div>
+
+    <div class="card">
+      <h3>Profit &amp; loss</h3>
+      <div class="hint">For the period selected above. Click any line to see what it is made of. Paper is costed at the average price you bought it for.</div>
+      <div class="pnl" id="pnl"></div>
+    </div>
+
+    <div class="card">
+      <h3>Your money in the business</h3>
+      <div class="hint">Since the start, whatever period is selected above. When you pay a business bill from your own pocket, that is money you put in — mark the expense or the paper purchase “Paid from: my own money”, or add a lump sum below. It does not make the expense disappear: the business still spent it, so profit stays the same. This shows how much of your money is in the business and how much the profit has paid back.</div>
+      <div class="pnl" id="own"></div>
+      <div style="margin-top:12px"><button class="linkbtn" id="capToggle">+ Add money put in / taken out</button></div>
+      <div id="capBox" hidden>
+        <form class="form" id="fCap" style="margin-top:8px">
+          <input type="hidden" name="id">
+          <label>Date<input type="date" name="date"></label>
+          <label>Type<select name="kind"><option value="in">I put money in</option><option value="out">I took money out</option></select></label>
+          <label>Amount (₹)<input type="number" name="amount" min="0" step="0.01"></label>
+          <label>Note<input name="note" placeholder="e.g. Cash for paper"></label>
+          <div><button class="btn primary" type="submit" id="capSave">Save</button> <button class="btn" type="button" id="capCancel" hidden>Cancel</button></div>
+        </form>
+        <span class="err" id="capErr"></span>
+        <div class="tablewrap" style="margin-top:10px"><table id="capList"></table></div>
+      </div>
+    </div>
+
+    <div id="queue" class="card queue" hidden></div>
+
+    <div class="group"><h2>Overview</h2><div class="tiles" id="overview"></div></div>
+    <div id="groups"></div>
+
+    <div class="card">
+      <h3>Paper used &amp; stock</h3>
+      <div class="hint">Used = sheets in this period. Stock left = everything you bought − everything printed since tracking started.</div>
+      <table id="paperUsed"></table>
+    </div>
+
+    <div class="card">
+      <h3>Live activity</h3>
+      <div class="hint">Newest first. If a print landed in the wrong category, change it in the last column.</div>
+      <div class="tablewrap"><table id="log"></table></div>
+    </div>
+  </section>
+
+  <!-- ================= PURCHASES ================= -->
+  <section id="viewS" hidden>
+    <div class="card">
+      <h3 id="purTitle">Add a purchase</h3>
+      <div class="hint">One supplier bill can have several lines — e.g. A4 packets, Legal masters and 12x18 masters together. Enter the amount for each line as on the bill. A4 is usually 500 sheets per packet, masters 100. Bought a few single sheets? Choose “Loose sheets”.</div>
+      <form class="form" id="fPur">
+        <label>Date<input type="date" name="date"></label>
+        <label>Supplier<input name="supplier" placeholder="Supplier name"></label>
+        <label>Bill no.<input name="bill_no" placeholder="optional"></label>
+        <label>Paid from<select name="paid_by"><option value="business">Business money</option><option value="owner">My own money</option></select></label>
+        <label>Note<input name="note"></label>
+      </form>
+      <div class="tablewrap" style="margin-top:12px"><table id="purLines"></table></div>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap">
+        <button class="btn" type="button" id="purAddLine">+ Add line</button>
+        <span style="flex:1"></span>
+        <b id="purTotal"></b>
+        <button class="btn" type="button" id="purCancel" hidden>Cancel</button>
+        <button class="btn primary" type="button" id="purSave">Save bill</button>
+      </div>
+      <span class="err" id="purErr"></span>
+    </div>
+    <div class="card">
+      <h3>Stock</h3>
+      <table id="stock"></table>
+    </div>
+    <div class="card">
+      <h3>Purchase history</h3>
+      <div class="tablewrap"><table id="purList"></table></div>
+    </div>
+  </section>
+
+  <!-- ================= OFFSET JOBS ================= -->
+  <section id="viewJ" hidden>
+    <div class="card">
+      <h3 id="jobTitle">Add an offset job</h3>
+      <div class="hint">Jobs you design here and send to another offset printer. Save the job first, then open its <b>Details</b> to add the paper, covers and other things you bought for it and to attach the masters you printed.</div>
+      <form class="form" id="fJob">
+        <input type="hidden" name="id">
+        <label>Date<input type="date" name="date"></label>
+        <label>Customer<input name="customer"></label>
+        <label>Job<input name="title" placeholder="e.g. Wedding invitation"></label>
+        <label>Quantity<input name="qty" placeholder="e.g. 500 cards"></label>
+        <label>Customer amount (₹)<input type="number" name="customer_amount" min="0" step="0.01"></label>
+        <label>Received from customer (₹)<input type="number" name="customer_paid" min="0" step="0.01"></label>
+        <label>Offset printer (supplier)<input name="supplier"></label>
+        <label>Supplier amount (₹)<input type="number" name="supplier_amount" min="0" step="0.01"></label>
+        <label>Paid to supplier (₹)<input type="number" name="supplier_paid" min="0" step="0.01"></label>
+        <label>Other cost (₹)<input type="number" name="other_cost" min="0" step="0.01" placeholder="transport, lamination…"></label>
+        <label style="grid-column:1/-1">Note<textarea name="note" rows="3" placeholder="any extra detail about this job…"></textarea></label>
+        <div><button class="btn primary" type="submit" id="jobSave">Add job</button> <button class="btn" type="button" id="jobCancel" hidden>Cancel</button></div>
+      </form>
+      <span class="err" id="jobErr"></span>
+    </div>
+    <div class="totals">
+      <div class="card k"><div class="l">Job sales (period)</div><div class="v" id="jSales">₹0</div></div>
+      <div class="card k"><div class="l">Job profit (period)</div><div class="v" id="jProfit">₹0</div></div>
+      <div class="card k"><div class="l">Customers owe you</div><div class="v" id="jRecv">₹0</div><div class="n">all jobs</div></div>
+      <div class="card k"><div class="l">You owe suppliers</div><div class="v" id="jPay">₹0</div><div class="n">all jobs</div></div>
+    </div>
+    <div class="card">
+      <h3>Jobs</h3>
+      <div class="tablewrap"><table id="jobList"></table></div>
+    </div>
+    <div class="card" id="jobDetail" hidden>
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline"><h3 id="jdTitle"></h3><button class="linkbtn" id="jdClose">Close</button></div>
+      <div class="hint" id="jdSub"></div>
+      <div class="two">
+        <div>
+          <h4>Things bought for this job</h4>
+          <div class="hint">Paper, covers, lamination, transport… One line each: how many and the price of one.</div>
+          <div class="tablewrap"><table id="jdItems"></table></div>
+          <form class="form" id="fItem" style="margin-top:10px">
+            <label>What<input name="title" placeholder="e.g. Yellow art paper"></label>
+            <label>How many<input type="number" name="qty" min="0" step="any" placeholder="128"></label>
+            <label>Price of one (₹)<input type="number" name="rate" min="0" step="any" placeholder="8"></label>
+            <div><button class="btn primary" type="submit">Add</button> <span class="mut" id="itemCalc"></span></div>
+          </form>
+          <span class="err" id="itemErr"></span>
+          <h4 style="margin-top:18px">Masters printed here for this job</h4>
+          <div class="hint">Cost = sheets × sheet price + sides × your master rate. One master printed in two goes shows as two lines; what matters is the total. If a line was printed on the back of sheets already counted in another line, set its sheets to 0. If the supplier made the master, attach nothing — it is inside the supplier amount.</div>
+          <div class="tablewrap"><table id="jdMasters"></table></div>
+          <div class="mut" style="margin:12px 0 4px">Master prints not attached to any job yet</div>
+          <div class="tablewrap"><table id="jdFree"></table></div>
+        </div>
+        <div>
+          <h4>Proofs / free prints for this job</h4>
+          <div class="hint">Prints you gave this customer without charging (proofs, samples). Attached prints are not counted as a sale; only their paper is counted as a cost of this job.</div>
+          <div class="tablewrap"><table id="jdProofs"></table></div>
+          <div class="mut" style="margin:12px 0 4px">Recent prints not attached to any job</div>
+          <div class="tablewrap"><table id="jdFreeP"></table></div>
+          <h4 style="margin-top:18px">This job</h4>
+          <div class="pnl" style="grid-template-columns:1fr" id="jdSum"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= EXPENSES ================= -->
+  <section id="viewE" hidden>
+    <div class="card">
+      <h3 id="expTitle">Add an expense</h3>
+      <div class="hint">Running costs that are not paper or supplier bills: toner, service, electricity, rent, salary. These reduce net profit.</div>
+      <form class="form" id="fExp">
+        <input type="hidden" name="id">
+        <label>Bill date<input type="date" name="date"></label>
+        <label>What for<input name="title" placeholder="e.g. Black toner"></label>
+        <label>Amount (₹)<input type="number" name="amount" min="0" step="0.01"></label>
+        <label>Due date<input type="date" name="due" id="expDue"></label>
+        <label style="flex-direction:row;align-items:center;gap:8px;padding-bottom:8px"><input type="checkbox" name="paid" id="expPaid" checked style="width:auto"> Already paid</label>
+        <label>Paid from<select name="paid_by"><option value="business">Business money</option><option value="owner">My own money</option></select></label>
+        <label data-new>Bill covers (months)<input type="number" name="months" min="1" max="24" step="1" value="1"></label>
+        <label data-new style="flex-direction:row;align-items:center;gap:8px;padding-bottom:8px"><input type="checkbox" name="repeat" style="width:auto"> Repeat every month</label>
+        <div><button class="btn primary" type="submit" id="expSave">Add expense</button> <button class="btn" type="button" id="expCancel" hidden>Cancel</button></div>
+      </form>
+      <div class="hint" style="margin:6px 0 0">Two-monthly electricity bill: enter the bill amount and “2” months — it is split across this month and last month. Rent: tick “Repeat every month” and it is added by itself on the 1st of each month. Bill not paid yet? Enter its due date and untick “Already paid” — it shows as due until you press “Mark paid”.</div>
+      <span class="err" id="expErr"></span>
+    </div>
+    <div class="card">
+      <h3>Monthly expenses (added automatically)</h3>
+      <table id="recList"></table>
+    </div>
+    <div class="card">
+      <h3>Expenses</h3>
+      <div class="tablewrap"><table id="expList"></table></div>
+    </div>
+  </section>
+
+  <!-- ================= PRICING ================= -->
+  <section id="viewP" hidden>
+    <div class="card">
+      <h3>Selling rates</h3>
+      <div class="hint">What you charge the customer per printed page (one side), <b>paper included</b>. Paper cost comes from your purchases.</div>
+      <table class="rates" id="rates"></table>
+      <h3 style="margin-top:22px">Paper cost when nothing is bought yet</h3>
+      <div class="hint">Used only until you enter a purchase for that paper. After that the average purchase price is used.</div>
+      <table class="rates" id="paperRates"></table>
+      <div style="margin-top:12px"><button class="btn primary" id="saveRates">Save</button><span class="saved" id="savedMsg">Saved ✓</span></div>
+    </div>
+    <div class="card">
+      <h3>A3 tray rule</h3>
+      <div class="hint">When the print driver is left on "Auto" the tray cannot be read from the job. Count those A3 prints as:</div>
+      <div class="seg" id="a3def">
+        <button data-v="bypass">Bypass / manual tray</button>
+        <button data-v="tray">Standard tray</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Other paper counters</h3>
+      <div class="hint">Legal and 12&nbsp;x&nbsp;18 masters are often a non-standard size, so the printer's own sensor cannot tell them apart from "Other" paper and logs them under one of these two generic counters instead of its named Legal/12x18 slot. Pick what each one should count as, so it lands in the right place automatically instead of needing a manual fix every time. (Only used when the document name doesn't already say which it is.)</div>
+      <div class="two">
+        <div>
+          <div class="mut" style="margin-bottom:6px">"Other (Single)" counter</div>
+          <div class="seg" id="oth1def">
+            <button data-v="none">Uncategorised</button>
+            <button data-v="master_legal">Legal master</button>
+            <button data-v="master_12x18">12x18 master</button>
+          </div>
+        </div>
+        <div>
+          <div class="mut" style="margin-bottom:6px">"Other (Double)" counter</div>
+          <div class="seg" id="oth2def">
+            <button data-v="none">Uncategorised</button>
+            <button data-v="master_legal">Legal master</button>
+            <button data-v="master_12x18">12x18 master</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Start over</h3>
+      <div class="hint">Deletes every tracked print and starts counting again from zero. Rates, purchases, jobs and expenses are kept. This cannot be undone.</div>
+      <button class="btn danger" id="resetBtn">Reset print counts…</button>
+      <span id="resetAsk" hidden>
+        <b style="margin:0 8px">Delete all tracked prints?</b>
+        <button class="btn danger" id="resetYes">Yes, delete</button>
+        <button class="btn" id="resetNo">Cancel</button>
+      </span>
+    </div>
+  </section>
+</div>
+
+<script>
+(function(){
+"use strict";
+const $=id=>document.getElementById(id);
+const INT=n=>Number(n||0).toLocaleString("en-IN");
+const INR=n=>(n<0?"−":"")+"₹"+Math.abs(Number(n||0)).toLocaleString("en-IN",{minimumFractionDigits:2,maximumFractionDigits:2});
+const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmtT=t=>new Date(t*1000).toLocaleString("en-IN",{day:"numeric",month:"short",hour:"numeric",minute:"2-digit",second:"2-digit"});
+const fmtD=t=>new Date(t*1000).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"});
+const isoD=t=>{const d=t?new Date(t*1000):new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");};
+const sign=n=>n<0?"neg":(n>0?"pos":"");
+let range="today", S=null, prevPages={}, prevGroupPages={}, ratesDirty=false, builtRates=false, selOpen=false, pendingDel=null, openGroup=null;
+let openJob=null, lastSaved=null, pnlOpen=new Set();
+function round2(x){ return Math.round(x*100)/100; }
+
+async function post(url,body,errEl){
+  let ok=true;
+  try{
+    const r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+    if(!r.ok){ ok=false; const j=await r.json().catch(()=>({})); if(errEl) errEl.textContent=j.error||"Could not save."; }
+    else { lastSaved=await r.json().catch(()=>null); if(errEl) errEl.textContent=""; }
+  }catch(e){ ok=false; if(errEl) errEl.textContent="Tracker is not running."; }
+  await load(); return ok;
+}
+async function load(){
+  try{
+    const r=await fetch("/api/state?range="+range,{cache:"no-store"});
+    S=await r.json(); render();
+  }catch(e){
+    $("pDot").className="dot bad"; $("pTxt").textContent="Tracker is not running";
+    $("warn").hidden=false; $("warn").textContent="The Print Tracker program is not running on this PC. Double-click “Start Print Tracker” to start it.";
+  }
+}
+const MLBL={master_legal:"Legal master",master_12x18:"12 x 18 master"};
+function renderJobDetail(){
+  const j=openJob==null?null:S.jobs.find(x=>x.id===openJob), box=$("jobDetail");
+  box.hidden=!j; if(!j){ openJob=null; return; }
+  $("jdTitle").textContent=(j.customer||"Job")+(j.title?" — "+j.title:"");
+  $("jdSub").innerHTML=esc(fmtD(j.ts)+(j.qty?" · "+j.qty:"")+(j.supplier?" · "+j.supplier:""))+(j.note?"<br>"+esc(j.note).replace(/\n/g,"<br>"):"");
+  $("jdItems").innerHTML=j.items.length?`<thead><tr><th>What</th><th class="num">How many</th><th class="num">Price of one</th><th class="num">Cost</th><th></th></tr></thead><tbody>`+
+    j.items.map(i=>`<tr><td>${esc(i.title||"")}</td><td class="num">${INT(i.qty)}</td><td class="num">${INR(i.rate)}</td><td class="num">${INR(i.amount)}</td><td>${delCell("job_item",i.id)}</td></tr>`).join("")+"</tbody>"
+    :`<tbody><tr><td class="empty">Nothing added yet.</td></tr></tbody>`;
+  if(!$("jobDetail").contains(document.activeElement) || document.activeElement.tagName!=="INPUT" || !document.activeElement.dataset.sheets){
+    $("jdMasters").innerHTML=j.masters.length?`<thead><tr><th>Printed</th><th>Master</th><th class="num">Sides</th><th class="num">Sheets</th><th class="num">Cost</th><th></th></tr></thead><tbody>`+
+      j.masters.map(m=>`<tr><td style="white-space:nowrap">${fmtD(m.ts)}</td><td>${MLBL[m.category]}<div class="mut">${esc(m.doc||"")}</div></td><td class="num">${m.pages}</td>
+        <td class="num"><input type="number" min="0" max="${m.pages}" step="1" value="${m.sheets}" data-sheets="${m.id}" style="width:64px;text-align:right"></td>
+        <td class="num">${INR(m.charge)}<div class="mut">${INR(m.paper_cost)} + ${INR(m.work)}</div></td>
+        <td><button class="linkbtn del" data-unlink="${m.id}">Remove</button></td></tr>`).join("")+
+        `<tr><td colspan="2"><b>Total</b></td><td class="num"><b>${j.masters.reduce((a,m)=>a+m.pages,0)}</b></td><td class="num"><b>${j.masters.reduce((a,m)=>a+m.sheets,0)} sheet${j.masters.reduce((a,m)=>a+m.sheets,0)===1?"":"s"}</b></td><td class="num"><b>${INR(j.master_cost)}</b></td><td></td></tr></tbody>`
+      :`<tbody><tr><td class="empty">No master attached.</td></tr></tbody>`;
+  }
+  $("jdFree").innerHTML=S.free_masters.length?"<tbody>"+
+    S.free_masters.map(m=>`<tr><td style="white-space:nowrap">${fmtD(m.ts)}</td><td>${MLBL[m.category]}<div class="mut">${esc(m.doc||"")}</div></td><td class="num">${m.pages} side${m.pages>1?"s":""}</td>
+      <td><button class="linkbtn" data-link="${m.id}" data-pages="${m.pages}" data-cat="${m.category}">Attach to this job</button></td></tr>`).join("")+"</tbody>"
+    :`<tbody><tr><td class="empty">None — every master print is already attached.</td></tr></tbody>`;
+  $("jdProofs").innerHTML=j.proofs.length?`<thead><tr><th>Printed</th><th>Print</th><th class="num">Pages</th><th class="num">Paper cost</th><th></th></tr></thead><tbody>`+
+    j.proofs.map(m=>`<tr><td style="white-space:nowrap">${fmtD(m.ts)}</td><td>${esc(m.label)}<div class="mut">${esc(m.doc||"")}</div></td><td class="num">${m.pages}</td><td class="num">${INR(m.paper_cost)}</td>
+      <td><button class="linkbtn del" data-unlink="${m.id}">Remove</button></td></tr>`).join("")+"</tbody>"
+    :`<tbody><tr><td class="empty">No proof attached.</td></tr></tbody>`;
+  $("jdFreeP").innerHTML=S.free_prints.length?"<tbody>"+
+    S.free_prints.map(m=>`<tr><td style="white-space:nowrap">${fmtD(m.ts)}</td><td>${esc(m.label)}<div class="mut">${esc(m.doc||"")}</div></td><td class="num">${m.pages} page${m.pages>1?"s":""}</td>
+      <td><button class="linkbtn" data-plink="${m.id}">Attach as proof</button></td></tr>`).join("")+"</tbody>"
+    :`<tbody><tr><td class="empty">No recent prints.</td></tr></tbody>`;
+  $("jdSum").innerHTML=`<div>
+    <div class="r t"><span>Customer pays</span><span>${INR(j.customer_amount)}</span></div>
+    <div class="r sub"><span>Offset printer${j.supplier?" ("+esc(j.supplier)+")":""}</span><span>${INR(-j.supplier_amount)}</span></div>
+    ${j.items.map(i=>`<div class="r sub"><span>${esc(i.title||"Item")} · ${INT(i.qty)} × ${INR(i.rate)}</span><span>${INR(-i.amount)}</span></div>`).join("")}
+    <div class="r sub"><span>Masters printed here${j.masters.length?" · "+j.masters.reduce((a,m)=>a+m.pages,0)+" sides":""}</span><span>${INR(-j.master_cost)}</span></div>
+    <div class="r sub"><span>Proofs / free prints${j.proofs.length?" · "+j.proofs.reduce((a,m)=>a+m.pages,0)+" pages":""}</span><span>${INR(-j.proof_cost)}</span></div>
+    <div class="r sub"><span>Other cost</span><span>${INR(-j.other_cost)}</span></div>
+    <div class="r t"><span>Total cost</span><span>${INR(-j.cost)}</span></div>
+    <div class="r t"><span>Profit</span><span class="${sign(j.profit)}">${INR(j.profit)}</span></div>
+    <div class="r sub" style="margin-top:8px"><span>Received from customer</span><span>${INR(j.customer_paid)}${j.receivable>0?" · due "+INR(j.receivable):""}</span></div>
+    <div class="r sub"><span>Paid to offset printer</span><span>${INR(j.supplier_paid)}${j.payable>0?" · to pay "+INR(j.payable):""}</span></div>
+  </div>`;
+}
+function delCell(kind,id){
+  const k=kind+":"+id;
+  return pendingDel===k?`<button class="linkbtn del" data-del="${k}" data-yes="1">Confirm delete</button><button class="linkbtn" data-del="">Cancel</button>`
+                       :`<button class="linkbtn del" data-del="${k}">Delete</button>`;
+}
+
+function render(){
+  const p=S.printer, q=S.queue, L=S.pnl;
+  $("pDot").className="dot "+(p.online?"ok":"bad");
+  $("pTxt").textContent=p.online?"Printer connected":"Printer not reachable";
+  $("qDot").className="dot "+(q.mode==="on"?(q.printers.length?"ok":"warn"):"warn");
+  $("qTxt").textContent=q.mode==="on"?(q.printers.length?"Watching queue: "+q.printers.join(", "):"No Kyocera printer installed in Windows"):"Document names off";
+  $("since").textContent=S.since?"Tracking since "+fmtT(S.since):"";
+  $("upd").textContent="Live · updated "+new Date().toLocaleTimeString("en-IN");
+  const warn=[];
+  if(!p.online) warn.push("Cannot read the printer at "+p.url+". Check that it is switched on and the cable is connected. Prints made meanwhile are still counted when it comes back.");
+  if(q.mode!=="on") warn.push("Counts still work, but document names and A3 tray detection are off: "+q.note);
+  const noCost=S.papers.filter(x=>x.sheets>0&&x.cost_src==="none").map(x=>x.label);
+  if(noCost.length) warn.push("No purchase price entered for: "+noCost.join(", ")+". Its paper cost is counted as ₹0, so profit looks higher than it is. Add a purchase under “Purchases & stock”.");
+  const today0=new Date().setHours(0,0,0,0)/1000, dueSoon=S.expenses.filter(x=>x.paid===0&&x.due_ts&&x.due_ts<today0+4*86400&&!(x.grp&&x.grp!==x.id));
+  if(dueSoon.length) warn.push("Bill to pay: "+dueSoon.map(x=>(x.title||"Expense").replace(/ \(\d+ of \d+ months\)$/,"")+" — "+(x.due_ts<today0?"overdue since ":"due ")+fmtD(x.due_ts)).join(", ")+". Open Expenses and press “Mark paid” after paying.");
+  $("warn").hidden=!warn.length; $("warn").innerHTML=warn.map(esc).join("<br>");
+
+  // headline
+  let bw=0,col=0;
+  S.cats.forEach(c=>{ if(c.colour==="bw") bw+=c.pages; else col+=c.pages; });
+  $("kSales").textContent=INR(L.sales); $("kSalesN").textContent="Prints "+INR(L.print_sales)+" + Offset jobs "+INR(L.job_sales);
+  $("kGross").textContent=INR(L.gross); $("kGross").className="v "+sign(L.gross);
+  $("kNet").textContent=INR(L.net); $("kNet").className="v "+sign(L.net);
+  $("tPages").textContent=INT(S.total_pages); $("tSplit").textContent="B&W "+INT(bw)+" · Colour "+INT(col);
+
+  {
+    const st=rangeStart(), inR=S.jobs.filter(j=>inRange(j.ts)), jn=j=>esc((j.customer||"Job")+(j.title?" — "+j.title:""));
+    const pl={}; S.papers.forEach(x=>pl[x.key]=x.label);
+    const D={
+      ps: S.cats.filter(c=>c.pages).map(c=>[esc(c.group+" · "+c.label)+` <span class="mut">${INT(c.pages)} × ${INR(c.rate)}</span>`, c.sales]),
+      js: inR.map(j=>[jn(j)+` <span class="mut">${fmtD(j.ts)}</span>`, j.customer_amount]),
+      pc: S.cats.filter(c=>c.pages).map(c=>[esc(c.group+" · "+c.label)+` <span class="mut">${INT(c.sheets)} sheet${c.sheets===1?"":"s"}</span>`, -c.paper_cost]),
+      sc: inR.filter(j=>j.supplier_amount).map(j=>[jn(j)+` <span class="mut">${esc(j.supplier||"")}</span>`, -j.supplier_amount]),
+      ji: inR.flatMap(j=>j.items.map(i=>[jn(j)+` <span class="mut">${esc(i.title||"")} · ${INT(i.qty)} × ${INR(i.rate)}</span>`, -i.amount])),
+      jm: inR.filter(j=>j.masters.length).map(j=>[jn(j)+` <span class="mut">${j.masters.reduce((a,m)=>a+m.pages,0)} sides · ${j.masters.reduce((a,m)=>a+m.sheets,0)} sheets</span>`, -j.master_cost]),
+      jo: inR.filter(j=>j.other_cost).map(j=>[jn(j), -j.other_cost]),
+      jp: inR.filter(j=>j.proofs.length).map(j=>[jn(j)+` <span class="mut">${j.proofs.reduce((a,m)=>a+m.pages,0)} pages</span>`, -j.proof_cost]),
+      pb: S.purchases.filter(x=>inRange(x.ts)).map(x=>[esc(pl[x.paper]||x.paper)+` <span class="mut">${fmtD(x.ts)} · ${INT(x.sheets)} sheets${x.supplier?" · "+esc(x.supplier):""}</span>`, x.total_cost]),
+      rc: S.jobs.filter(j=>j.receivable>0).map(j=>[jn(j)+` <span class="mut">${fmtD(j.ts)}</span>`, j.receivable]),
+      bd: S.expenses.filter(x=>x.paid===0).map(x=>[esc(x.title||"Expense")+(x.due_ts?` <span class="mut">due ${fmtD(x.due_ts)}</span>`:""), x.amount]),
+      py: S.jobs.filter(j=>j.payable>0).map(j=>[jn(j)+` <span class="mut">${esc(j.supplier||"")}</span>`, j.payable]),
+    };
+    const row=(k,label,val,style)=>pnlRow(k,label,val,D[k],style);
+    const pct=v=>L.sales?` <span class="mut" style="font-weight:400;font-size:12px">${Math.round(v/L.sales*100)}% of sales</span>`:"";
+    $("pnl").innerHTML=`<div>
+      <div class="h">Income</div>
+      ${row("ps","Print sales (this machine)",L.print_sales)}
+      ${row("js","Offset job sales",L.job_sales)}
+      <div class="r t"><span>Total income</span><span>${INR(L.sales)}</span></div>
+      <div class="h">Cost of sales <span class="mut" style="text-transform:none;letter-spacing:0">— what the work itself cost</span></div>
+      ${row("pc","Paper &amp; masters used",-L.paper_cost)}
+      ${row("sc","Offset printers",-L.supplier_cost)}
+      ${row("ji","Bought for offset jobs (paper, covers…)",-L.job_items)}
+      ${row("jm","Masters used in offset jobs",-L.job_masters)}
+      ${row("jp","Proofs / free prints for offset jobs",-L.job_proofs)}
+      ${row("jo","Other job costs",-L.job_other)}
+      <div class="r t"><span>Total cost of sales</span><span>${INR(-L.direct)}</span></div>
+    </div><div>
+      <div class="r t" style="margin-top:22px"><span>Gross profit${pct(L.gross)}</span><span class="${sign(L.gross)}">${INR(L.gross)}</span></div>
+      <div class="h">Running expenses <span class="mut" style="text-transform:none;letter-spacing:0">— rent, power, service, toner</span></div>
+      ${expRows()}
+      <div class="r t"><span>Total running expenses</span><span>${INR(-L.expenses)}</span></div>
+      <div class="r t" style="font-size:17px;border-top:2px solid var(--ring);margin-top:6px;padding-top:10px"><span>Net ${L.net<0?"loss":"profit"}${pct(L.net)}</span><span class="${sign(L.net)}">${INR(L.net)}</span></div>
+      <div class="h">For your information <span class="mut" style="text-transform:none;letter-spacing:0">— not part of profit</span></div>
+      ${row("pb","Paper bought in this period (cash out)",L.purchase_spend)}
+      ${row("rc","Customers still owe you (all jobs)",L.receivable)}
+      ${row("py","You still owe offset printers (all jobs)",L.payable)}
+      ${row("bd","Expense bills still to pay",L.bills_due||0)}
+    </div>`;
+  }
+
+  // owner's money
+  if(S.owner){
+    const O=S.owner, need=-O.net_all;
+    const dIn=[...S.capital.filter(c=>c.kind==="in").map(c=>[esc(c.note||"Money put in")+` <span class="mut">${fmtD(c.ts)}</span>`,c.amount]),
+               ...S.expenses.filter(x=>x.paid_by==="owner"&&x.paid!==0).map(x=>[esc(x.title||"Expense")+` <span class="mut">${fmtD(x.ts)} · paid from your pocket</span>`,x.amount]),
+               ...(()=>{ const pl={}; S.papers.forEach(p=>pl[p.key]=p.label); const by={};
+                   S.purchases.filter(x=>x.paid_by==="owner").forEach(x=>{ const k=x.bill_no?"b:"+x.bill_no+"|"+(x.supplier||"")+"|"+isoD(x.ts):"p:"+x.id;
+                     (by[k]=by[k]||{ts:x.ts,label:x.bill_no?"Paper bill "+x.bill_no+(x.supplier?" · "+x.supplier:""):(pl[x.paper]||x.paper)+(x.supplier?" · "+x.supplier:""),amt:0}).amt+=x.total_cost; });
+                   return Object.values(by).map(b=>[esc(b.label)+` <span class="mut">${fmtD(b.ts)} · bought with your money</span>`,b.amt]); })()];
+    const dOut=S.capital.filter(c=>c.kind==="out").map(c=>[esc(c.note||"Money taken out")+` <span class="mut">${fmtD(c.ts)}</span>`,-c.amount]);
+    const back=O.put_in>0?Math.max(0,Math.min(1,O.net_all/O.put_in)):0;
+    $("own").innerHTML=`<div>
+      ${pnlRow("oi","Money you put in",O.put_in,dIn)}
+      ${pnlRow("oo","Money you took out",-O.took_out,dOut)}
+      <div class="r sub"><span>Profit / loss since the start</span><span class="${sign(O.net_all)}">${INR(O.net_all)}</span></div>
+      <div class="r t"><span>Your money in the business now</span><span>${INR(O.balance)}</span></div>
+    </div><div>
+      <div class="r t"><span>Paid back by profit</span><span>${Math.round(back*100)}%</span></div>
+      <div style="height:10px;border-radius:6px;background:var(--line);overflow:hidden;margin:6px 0 10px"><div style="height:100%;width:${back*100}%;background:var(--good)"></div></div>
+      <div class="mut" style="font-size:13px;line-height:1.5">${O.put_in<=0?"No investment recorded yet. Mark expenses you paid yourself as “Paid from: my own money”, or add a lump sum."
+        :need>0?`The business has made a loss of ${INR(need)} so far. It needs ${INR(need)} more profit to break even, and then ${INR(O.put_in-O.took_out)} more to pay back what you put in.`
+        :back>=1?"Profit so far has paid back everything you put in."
+        :`Profit so far has paid back ${INR(O.net_all)} of the ${INR(O.put_in)} you put in.`}</div>
+    </div>`;
+    $("capList").innerHTML=S.capital.length?`<thead><tr><th>Date</th><th>Type</th><th>Note</th><th class="num">Amount</th><th></th></tr></thead><tbody>`+
+      S.capital.map(c=>`<tr><td>${fmtD(c.ts)}</td><td>${c.kind==="in"?"Put in":"Took out"}</td><td>${esc(c.note||"")}</td><td class="num">${INR(c.amount)}</td>
+        <td style="white-space:nowrap"><button class="linkbtn" data-cedit="${c.id}">Edit</button>${delCell("capital",c.id)}</td></tr>`).join("")+"</tbody>"
+      :`<tbody><tr><td class="empty">No lump sums yet. Expenses paid from your own pocket are counted automatically.</td></tr></tbody>`;
+  }
+
+  // printing now
+  const qa=q.active||[];
+  $("queue").hidden=!qa.length;
+  $("queue").innerHTML=qa.length?"<b>Printing now:</b> "+qa.map(j=>esc(j.doc||"(untitled)")+" <span class='mut'>· "+esc(j.paper)+(j.color===true?" · Colour":j.color===false?" · B&W":"")+(j.tray?" · "+esc(j.tray):"")+"</span>").join(" &nbsp;|&nbsp; "):"";
+
+  // overview: A4 / A3 (drill-down) + Legal / 12x18 / Scans (shown straight, no breakdown needed)
+  const byKey={}; S.cats.forEach(c=>byKey[c.key]=c);
+  const sumCats=keys=>keys.reduce((a,k)=>{ const c=byKey[k]; if(c){a.pages+=c.pages;a.sheets+=c.sheets;a.sales+=c.sales;a.paper_cost+=c.paper_cost;a.profit+=c.profit;} return a; },{pages:0,sheets:0,sales:0,paper_cost:0,profit:0});
+  const A4K=["a4_bw_single","a4_bw_duplex","a4_color_single","a4_color_duplex"];
+  const A3K=["a3_tray_bw","a3_tray_color","a3_bypass_bw","a3_bypass_color"];
+  const a4t=sumCats(A4K), a3t=sumCats(A3K);
+  const ovTile=(label,t,g)=>`
+    <div class="card tile" id="t_${g}" data-ov="${g}" style="cursor:pointer">
+      <div class="l">${esc(label)}</div>
+      <div class="v">${INT(t.pages)}<span class="u">${t.pages===1?"page":"pages"}</span></div>
+      <div class="m"><span>${INT(t.sheets)} sheet${t.sheets===1?"":"s"}</span><b>${INR(t.sales)}</b></div>
+      <div class="m"><span>Paper ${INR(-t.paper_cost)}</span><span class="${sign(t.profit)}">Profit ${INR(t.profit)}</span></div>
+      <div class="m"><span class="mut">${openGroup===g?"Hide breakdown ▲":"View breakdown ▼"}</span></div>
+    </div>`;
+  const flatTile=(label,c)=>!c?"":`
+    <div class="card tile" id="t_${c.key}">
+      <div class="l"><span class="sw ${c.colour}"></span>${esc(label)}</div>
+      <div class="v">${INT(c.pages)}<span class="u">${c.pages===1?"page":"pages"}</span></div>
+      <div class="m"><span>${INT(c.sheets)} sheet${c.sheets===1?"":"s"} · ${c.rate?INR(c.rate)+"/page":"rate not set"}</span><b>${INR(c.sales)}</b></div>
+      <div class="m"><span>Paper ${INR(-c.paper_cost)}</span><span class="${sign(c.profit)}">Profit ${INR(c.profit)}</span></div>
+    </div>`;
+  const scanTile=`
+    <div class="card tile" id="t_scan">
+      <div class="l">Scans</div>
+      <div class="v">${INT(S.scans||0)}<span class="u">${(S.scans||0)===1?"scan":"scans"}</span></div>
+      <div class="m"><span class="mut">Copying + scan-to-PC/email, this period</span></div>
+    </div>`;
+  $("overview").innerHTML = ovTile("A4",a4t,"A4") + ovTile("A3",a3t,"A3") +
+    flatTile("Legal master",byKey["master_legal"]) + flatTile("12 x 18 master",byKey["master_12x18"]) + scanTile;
+  document.querySelectorAll("#overview [data-ov]").forEach(el=>el.onclick=()=>{ openGroup=openGroup===el.dataset.ov?null:el.dataset.ov; render(); });
+
+  // drill-down (A4 / A3 breakdown when opened) + "Other sizes" always shown when it has prints
+  const groups=[]; const by={};
+  S.cats.forEach(c=>{ if(!by[c.group]){by[c.group]=[];groups.push(c.group);} by[c.group].push(c); });
+  const showGroups=groups.filter(g=>{
+    if(g==="A4") return openGroup==="A4";
+    if(g==="A3 - Standard tray"||g==="A3 - Bypass / manual tray") return openGroup==="A3";
+    if(g==="Offset masters") return false;   // shown directly on the overview cards above
+    return true;                             // "Other sizes (uncategorised)"
+  });
+  $("groups").innerHTML=showGroups.map(g=>{
+    const cs=by[g];
+    if(g.indexOf("Other")===0 && !cs.some(c=>c.pages)) return "";
+    return `<div class="group"><h2>${esc(g)}</h2><div class="tiles">`+cs.map(c=>`
+      <div class="card tile" id="t_${c.key}">
+        <div class="l"><span class="sw ${c.colour}"></span>${esc(c.label)}</div>
+        <div class="v">${INT(c.pages)}<span class="u">${c.pages===1?"page":"pages"}</span></div>
+        <div class="m"><span>${INT(c.sheets)} sheet${c.sheets===1?"":"s"} · ${c.rate?INR(c.rate)+"/page":"rate not set"}</span><b>${INR(c.sales)}</b></div>
+        <div class="m"><span>Paper ${INR(-c.paper_cost)}</span><span class="${sign(c.profit)}">Profit ${INR(c.profit)}</span></div>
+      </div>`).join("")+`</div></div>`;
+  }).join("");
+  S.cats.forEach(c=>{
+    if(prevPages[c.key]!==undefined && c.pages>prevPages[c.key]){
+      const el=$("t_"+c.key); if(el){ el.classList.add("flash"); setTimeout(()=>el.classList.remove("flash"),900); }
+    }
+    prevPages[c.key]=c.pages;
+  });
+  [["A4",a4t],["A3",a3t]].forEach(([g,t])=>{
+    if(prevGroupPages[g]!==undefined && t.pages>prevGroupPages[g]){
+      const el=$("t_"+g); if(el){ el.classList.add("flash"); setTimeout(()=>el.classList.remove("flash"),900); }
+    }
+    prevGroupPages[g]=t.pages;
+  });
+
+  const costTxt=x=>x.cost_src==="none"?"<span class='mut'>not set</span>":INR(x.cost)+(x.cost_src==="manual"?" <span class='mut'>(manual)</span>":"");
+  const stockTxt=x=>x.bought?`<span class="${x.stock<0?"neg":""}">${INT(x.stock)}</span>`:"<span class='mut'>—</span>";
+  $("paperUsed").innerHTML=`<thead><tr><th>Paper</th><th class="num">Used (sheets)</th><th class="num">Cost / sheet</th><th class="num">Paper cost</th><th class="num">Stock left</th></tr></thead><tbody>`+
+    S.papers.map(x=>`<tr><td>${esc(x.label)}</td><td class="num">${INT(x.sheets)}</td><td class="num">${costTxt(x)}</td><td class="num">${INR(x.amount)}</td><td class="num">${stockTxt(x)}</td></tr>`).join("")+
+    `<tr><td><b>Total</b></td><td class="num"><b>${INT(S.papers.reduce((a,x)=>a+x.sheets,0))}</b></td><td></td><td class="num"><b>${INR(L.paper_cost)}</b></td><td></td></tr></tbody>`;
+
+  if(!selOpen){
+    const opts=S.cats.map(c=>[c.key,c.group+" · "+c.label]);
+    $("log").innerHTML=S.events.length?`<thead><tr><th>Time</th><th>Document</th><th>Size</th><th class="num">Pages</th><th class="num">Sale</th><th class="num">Profit</th><th>Category</th></tr></thead><tbody>`+
+      S.events.map(e=>`<tr>
+        <td style="white-space:nowrap">${fmtT(e.ts)}</td>
+        <td><div class="doc">${esc(e.doc||(e.via==="copy"?"Copy at machine panel":"(document name not captured)"))}</div><div class="mut">${esc(e.app||"")}${e.app?" · ":""}${e.via==="copy"?"Copy":"Print"}${e.job_id?" · for an offset job":""}${e.tray_src==="default"?" · tray assumed":e.tray_src==="driver"?" · tray from driver":e.tray_src==="manual"?" · changed by you":""}</div></td>
+        <td>${esc(e.size||"")}</td>
+        <td class="num">${INT(e.pages)}</td>
+        <td class="num">${INR(e.amount)}</td>
+        <td class="num"><span class="${sign(e.profit)}">${INR(e.profit)}</span><div class="mut">paper ${INR(e.paper_cost)}</div></td>
+        <td><select data-id="${e.id}">${opts.map(o=>`<option value="${o[0]}"${o[0]===e.category?" selected":""}>${esc(o[1])}</option>`).join("")}<option value="__del">✕ Did not print — remove</option></select></td>
+      </tr>`).join("")+"</tbody>"
+      :`<tbody><tr><td class="empty">No prints tracked in this period yet. Send a print — it will appear here within a few seconds.</td></tr></tbody>`;
+  }
+
+  // purchases & stock
+  if(!purLines.length){ purLines.push(newLine()); drawLines(); }
+  $("stock").innerHTML=`<thead><tr><th>Paper</th><th class="num">Bought (sheets)</th><th class="num">Paid</th><th class="num">Avg cost / sheet</th><th class="num">Used</th><th class="num">Stock left</th></tr></thead><tbody>`+
+    S.papers.map(x=>`<tr><td>${esc(x.label)}</td><td class="num">${INT(x.bought)}</td><td class="num">${INR(x.bought_cost)}</td><td class="num">${costTxt(x)}</td><td class="num">${INT(x.used_total)}</td><td class="num">${stockTxt(x)}</td></tr>`).join("")+"</tbody>";
+  const pl={}; S.papers.forEach(x=>pl[x.key]=x.label);
+  $("purList").innerHTML=S.purchases.length?`<thead><tr><th>Date</th><th>Paper</th><th>Supplier</th><th class="num">Packets</th><th class="num">Sheets</th><th class="num">Paid</th><th class="num">Per sheet</th><th></th></tr></thead><tbody>`+
+    S.purchases.map(x=>`<tr><td>${fmtD(x.ts)}</td><td>${esc(pl[x.paper]||x.paper)}<div class="mut">${esc(x.note||"")}</div></td><td>${esc(x.supplier||"")}${x.bill_no||x.paid_by==="owner"?`<div class="mut">${x.bill_no?"Bill "+esc(x.bill_no):""}${x.bill_no&&x.paid_by==="owner"?" · ":""}${x.paid_by==="owner"?"your own money":""}</div>`:""}</td><td class="num">${x.loose?"loose":x.packets+" × "+INT(x.sheets_per_packet)}</td><td class="num">${INT(x.sheets)}</td><td class="num">${INR(x.total_cost)}</td><td class="num">${INR(x.per_sheet)}</td><td style="white-space:nowrap"><button class="linkbtn" data-pedit="${x.id}">Edit</button>${delCell("purchase",x.id)}</td></tr>`).join("")+"</tbody>"
+    :`<tbody><tr><td class="empty">No purchases entered yet.</td></tr></tbody>`;
+
+  // jobs
+  let js=0,jp=0; const start=rangeStart();
+  S.jobs.forEach(j=>{ if(inRange(j.ts)){ js+=j.customer_amount; jp+=j.profit; } });
+  $("jSales").textContent=INR(js); $("jProfit").textContent=INR(jp); $("jProfit").className="v "+sign(jp);
+  $("jRecv").textContent=INR(L.receivable); $("jPay").textContent=INR(L.payable);
+  $("jobList").innerHTML=S.jobs.length?`<thead><tr><th>Date</th><th>Customer / job</th><th class="num">Customer</th><th class="num">Offset printer</th><th class="num">Bought</th><th class="num">Masters</th><th class="num">Other</th><th class="num">Profit</th><th></th></tr></thead><tbody>`+
+    S.jobs.map(j=>`<tr${openJob===j.id?' style="background:var(--surface-2,rgba(127,127,127,.08))"':""}><td style="white-space:nowrap">${fmtD(j.ts)}</td>
+      <td><div class="doc">${esc(j.customer||"")}</div><div class="mut">${esc(j.title||"")}${j.qty?" · "+esc(j.qty):""}</div></td>
+      <td class="num">${INR(j.customer_amount)}<div class="mut">${j.receivable>0?"due "+INR(j.receivable):"received"}</div></td>
+      <td class="num">${INR(j.supplier_amount)}<div class="mut">${esc(j.supplier||"")}${j.supplier?" · ":""}${j.payable>0?"to pay "+INR(j.payable):"paid"}</div></td>
+      <td class="num">${INR(j.items_cost)}<div class="mut">${j.items.length?j.items.length+" item"+(j.items.length>1?"s":""):""}</div></td>
+      <td class="num">${INR(j.master_cost)}<div class="mut">${j.masters.length?j.masters.reduce((a,m)=>a+m.pages,0)+" sides":""}</div></td>
+      <td class="num">${INR(j.other_cost)}</td>
+      <td class="num"><b class="${sign(j.profit)}">${INR(j.profit)}</b></td>
+      <td style="white-space:nowrap"><button class="linkbtn" data-job="${j.id}">${openJob===j.id?"Hide":"Details"}</button><button class="linkbtn" data-edit="${j.id}">Edit</button>${delCell("job",j.id)}</td></tr>`).join("")+"</tbody>"
+    :`<tbody><tr><td class="empty">No offset jobs entered yet.</td></tr></tbody>`;
+  renderJobDetail();
+
+  // expenses
+  $("expList").innerHTML=S.expenses.length?`<thead><tr><th>Bill date</th><th>What for</th><th>Due / paid</th><th class="num">Amount</th><th></th></tr></thead><tbody>`+
+    S.expenses.map(x=>`<tr><td>${fmtD(x.ts)}</td><td>${esc(x.title||"")}${x.paid_by==="owner"?`<div class="mut">paid from your own money</div>`:""}</td><td>${dueTxt(x)}</td><td class="num">${INR(x.amount)}</td>
+      <td style="white-space:nowrap">${x.paid===0?`<button class="linkbtn" data-epaid="${x.id}">Mark paid</button>`:""}<button class="linkbtn" data-eedit="${x.id}">Edit</button>${delCell("expense",x.id)}</td></tr>`).join("")+"</tbody>"
+    :`<tbody><tr><td class="empty">No expenses entered yet.</td></tr></tbody>`;
+
+  $("recList").innerHTML=S.recurring.length?`<thead><tr><th>What for</th><th class="num">Every month</th><th></th></tr></thead><tbody>`+
+    S.recurring.map(x=>`<tr><td>${esc(x.title||"")}${x.paid_by==="owner"?`<div class="mut">paid from your own money</div>`:""}</td><td class="num">${INR(x.amount)}</td><td>${delCell("recurring",x.id)}</td></tr>`).join("")+"</tbody>"
+    :`<tbody><tr><td class="empty">None yet.</td></tr></tbody>`;
+
+  // pricing
+  if(!builtRates || !ratesDirty){
+    $("rates").innerHTML=`<thead><tr><th>Print type</th><th class="num">Selling rate (₹ per page)</th><th class="num">Paper cost per page</th><th class="num">Margin per page</th></tr></thead><tbody>`+
+      S.cats.map(c=>{const pc=c.rate-c.margin_page;return `<tr><td><span class="sw ${c.colour}" style="margin-right:7px"></span>${esc(c.group)} · ${esc(c.label)}</td>
+        <td class="num"><input type="number" min="0" step="0.05" data-k="${c.key}" value="${c.rate}"></td>
+        <td class="num">${c.paper_cost_sheet?INR(pc):"<span class='mut'>not set</span>"}</td>
+        <td class="num">${c.rate?`<span class="${sign(c.margin_page)}">${INR(c.margin_page)}</span>`:"<span class='mut'>—</span>"}</td></tr>`;}).join("")+"</tbody>";
+    $("paperRates").innerHTML=`<thead><tr><th>Paper</th><th class="num">Manual cost (₹ per sheet)</th><th class="num">In use now</th></tr></thead><tbody>`+
+      S.papers.map(x=>`<tr><td>${esc(x.label)}</td><td class="num"><input type="number" min="0" step="0.01" data-p="${x.key}" value="${x.manual}"></td><td class="num">${x.cost_src==="purchase"?INR(x.cost)+" <span class='mut'>(from purchases)</span>":costTxt(x)}</td></tr>`).join("")+"</tbody>";
+    builtRates=true;
+  }
+  document.querySelectorAll("#a3def button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.v===S.settings.a3_default)));
+  document.querySelectorAll("#oth1def button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.v===S.settings.other1_default)));
+  document.querySelectorAll("#oth2def button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.v===S.settings.other2_default)));
+}
+function pnlRow(k,label,val,det,style){
+  const open=pnlOpen.has(k);
+  return `<div class="r sub click" data-pnl="${k}"${style?` style="${style}"`:""}><span><i class="car">${open?"▾":"▸"}</i>${label}</span><span>${INR(val)}</span></div>`+
+    (open?(det&&det.length?det.map(d=>`<div class="r det"><span>${d[0]}</span><span>${INR(d[1])}</span></div>`).join(""):`<div class="r det"><span class="mut">Nothing here</span><span></span></div>`):"");
+}
+function expRows(){
+  const st=rangeStart(), by={}, order=[];
+  S.expenses.forEach(x=>{ if(inRange(x.ts)){ const k=(x.title||"Expense").replace(/ \(\d+ of \d+ months\)$/,"").trim()||"Expense"; if(!(k in by)){by[k]=[];order.push(k);} by[k].push(x); } });
+  if(!order.length) return `<div class="r sub"><span class="mut">No expenses entered in this period</span><span></span></div>`;
+  const tot=k=>by[k].reduce((a,x)=>a+x.amount,0);
+  return order.sort((p,q)=>tot(q)-tot(p)).map(k=>pnlRow("ex:"+k,esc(k),-tot(k),by[k].map(x=>[fmtD(x.ts)+` <span class="mut">${esc(x.title||"")}</span>`,-x.amount]))).join("");
+}
+function inRange(ts){ return ts>=rangeStart() && (S.end==null || ts<S.end); }
+function rangeStart(){
+  if(S && S.range===range && S.start!=null) return S.start;
+  const d=new Date(); d.setHours(0,0,0,0);
+  if(range==="today") return d/1000;
+  if(range==="7"){ d.setDate(d.getDate()-6); return d/1000; }
+  if(range==="month"){ d.setDate(1); return d/1000; }
+  return 0;
+}
+
+// ---- events
+$("log").addEventListener("focusin",e=>{ if(e.target.tagName==="SELECT") selOpen=true; });
+$("log").addEventListener("focusout",e=>{ if(e.target.tagName==="SELECT") selOpen=false; });
+$("log").addEventListener("change",e=>{
+  if(e.target.tagName==="SELECT"){ selOpen=false; e.target.blur();
+    if(e.target.value==="__del"){ if(confirm("Remove this print from the records? Use this only if nothing actually came out of the printer.")) post("/api/delete",{kind:"event",id:+e.target.dataset.id}); else render(); }
+    else post("/api/event",{id:+e.target.dataset.id,category:e.target.value}); }
+});
+document.addEventListener("click",e=>{
+  const b=e.target.closest("[data-del]");
+  if(b){
+    if(b.dataset.yes){ const [kind,id]=b.dataset.del.split(":"); pendingDel=null; post("/api/delete",{kind,id:+id}); }
+    else { pendingDel=b.dataset.del||null; render(); }
+    return;
+  }
+  const pr=e.target.closest("[data-pnl]");
+  if(pr){ const k=pr.dataset.pnl; pnlOpen.has(k)?pnlOpen.delete(k):pnlOpen.add(k); render(); return; }
+  const jb=e.target.closest("[data-job]");
+  if(jb){ openJob=openJob===+jb.dataset.job?null:+jb.dataset.job; render(); if(openJob) $("jobDetail").scrollIntoView({behavior:"smooth",block:"start"}); return; }
+  const lk=e.target.closest("[data-link]");
+  if(lk&&openJob){
+    // front & back share a sheet across entries too: 3 sides + 1 side later = 4 sides = 2 sheets, not 3
+    const j=S.jobs.find(x=>x.id===openJob), cat=lk.dataset.cat, pg=+lk.dataset.pages;
+    const same=(j?j.masters:[]).filter(m=>m.category===cat), sides=same.reduce((a,m)=>a+m.pages,0), used=same.reduce((a,m)=>a+m.sheets,0);
+    post("/api/job_link",{event_id:+lk.dataset.link,job_id:openJob,sheets:Math.max(0,Math.min(pg,Math.ceil((sides+pg)/2)-used))}); return; }
+  const pk=e.target.closest("[data-plink]");
+  if(pk&&openJob){ post("/api/job_link",{event_id:+pk.dataset.plink,job_id:openJob}); return; }
+  const ul=e.target.closest("[data-unlink]");
+  if(ul){ post("/api/job_link",{event_id:+ul.dataset.unlink,job_id:0,sheets:null}); return; }
+  const ep=e.target.closest("[data-epaid]");
+  if(ep){ post("/api/expense_paid",{id:+ep.dataset.epaid,paid:true}); return; }
+  const ee=e.target.closest("[data-eedit]");
+  if(ee){ const x=S.expenses.find(y=>y.id===+ee.dataset.eedit); if(!x) return; const f=$("fExp");
+    f.elements.id.value=x.id; f.elements.date.value=isoD(x.ts); f.elements.title.value=x.title||""; f.elements.amount.value=x.amount;
+    f.elements.due.value=x.due_ts?isoD(x.due_ts):""; f.elements.paid_by.value=x.paid_by==="owner"?"owner":"business"; $("expPaid").checked=x.paid!==0; $("expPaid").dataset.touched="1";
+    f.querySelectorAll("[data-new]").forEach(l=>l.hidden=true);
+    $("expTitle").textContent="Edit expense"; $("expSave").textContent="Save changes"; $("expCancel").hidden=false; f.scrollIntoView({behavior:"smooth",block:"center"}); return; }
+  const ce=e.target.closest("[data-cedit]");
+  if(ce){ const c=S.capital.find(y=>y.id===+ce.dataset.cedit); if(!c) return; const f=$("fCap");
+    f.elements.id.value=c.id; f.elements.date.value=isoD(c.ts); f.elements.kind.value=c.kind; f.elements.amount.value=c.amount; f.elements.note.value=c.note||"";
+    $("capSave").textContent="Save changes"; $("capCancel").hidden=false; return; }
+  const pe=e.target.closest("[data-pedit]");
+  if(pe){ purStartEdit(+pe.dataset.pedit); return; }
+  const ed=e.target.closest("[data-edit]");
+  if(ed){
+    const j=S.jobs.find(x=>x.id===+ed.dataset.edit); if(!j) return;
+    const f=$("fJob");
+    ["customer","title","qty","customer_amount","customer_paid","supplier","supplier_amount","supplier_paid","other_cost","note"].forEach(k=>f.elements[k].value=j[k]==null?"":j[k]);
+    f.elements.id.value=j.id; f.elements.date.value=isoD(j.ts);
+    $("jobTitle").textContent="Edit offset job"; $("jobSave").textContent="Save changes"; $("jobCancel").hidden=false;
+    f.scrollIntoView({behavior:"smooth",block:"center"});
+  }
+});
+function formData(f){ const o={}; [...f.elements].forEach(el=>{ if(el.name) o[el.name]=el.type==="checkbox"?el.checked:el.value; }); return o; }
+function resetForm(f){ f.reset(); f.elements.date.value=isoD(); }
+["fPur","fJob","fExp","fCap"].forEach(id=>resetForm($(id)));
+let purLines=[];
+const newLine=(paper)=>({paper:paper||"a4",mode:"packet",packets:1,spp:/master/.test(paper||"a4")?100:500,loose:"",cost:""});
+let purEdit=null;   // ids of the saved lines being edited
+function purDone(){ resetForm($("fPur")); purLines=[newLine()]; purEdit=null; $("purTitle").textContent="Add a purchase"; $("purSave").textContent="Save bill"; $("purCancel").hidden=true; $("purErr").textContent=""; drawLines(); }
+function purStartEdit(id){
+  const x=S.purchases.find(p=>p.id===id); if(!x) return;
+  // the whole bill when it has a bill number, otherwise just this line
+  const rows=x.bill_no?S.purchases.filter(p=>p.bill_no===x.bill_no&&(p.supplier||"")===(x.supplier||"")&&isoD(p.ts)===isoD(x.ts)):[x];
+  const f=$("fPur"); f.elements.date.value=isoD(x.ts); f.elements.supplier.value=x.supplier||""; f.elements.bill_no.value=x.bill_no||""; f.elements.paid_by.value=x.paid_by==="owner"?"owner":"business";
+  const notes=[...new Set(rows.map(r=>r.note||""))]; f.elements.note.value=notes.length===1?notes[0]:"";
+  purLines=rows.slice().reverse().map(r=>({id:r.id,paper:r.paper,mode:r.loose?"loose":"packet",packets:r.packets,spp:r.sheets_per_packet,loose:r.loose?r.sheets:"",cost:r.total_cost,note:notes.length===1?"":(r.note||"")}));
+  purEdit=rows.map(r=>r.id);
+  $("purTitle").textContent=x.bill_no?"Edit bill "+x.bill_no:"Edit purchase"; $("purSave").textContent="Save changes"; $("purCancel").hidden=false; $("purErr").textContent="";
+  drawLines(); $("fPur").scrollIntoView({behavior:"smooth",block:"center"});
+}
+function lineSheets(l){ return l.mode==="loose"?(+l.loose||0):(+l.packets||0)*(+l.spp||0); }
+function drawLines(){
+  const opts=k=>(S?S.papers:[]).map(x=>`<option value="${x.key}"${x.key===k?" selected":""}>${esc(x.label)}</option>`).join("");
+  $("purLines").innerHTML=`<thead><tr><th>Paper</th><th>Bought as</th><th class="num">Packets</th><th class="num">Sheets / packet</th><th class="num">Sheets</th><th class="num">Amount (₹)</th><th class="num">Per sheet</th><th></th></tr></thead><tbody>`+
+    purLines.map((l,i)=>{ const n=lineSheets(l), c=+l.cost||0; return `<tr data-i="${i}">
+      <td><select data-f="paper">${opts(l.paper)}</select></td>
+      <td><select data-f="mode"><option value="packet"${l.mode==="packet"?" selected":""}>Packets</option><option value="loose"${l.mode==="loose"?" selected":""}>Loose sheets</option></select></td>
+      ${l.mode==="loose"
+        ?`<td class="num mut">—</td><td class="num mut">—</td><td class="num"><input type="number" data-f="loose" min="1" step="1" value="${l.loose}" placeholder="sheets" style="width:90px;text-align:right"></td>`
+        :`<td class="num"><input type="number" data-f="packets" min="0" step="0.5" value="${l.packets}" style="width:70px;text-align:right"></td>
+          <td class="num"><input type="number" data-f="spp" min="1" step="1" value="${l.spp}" style="width:80px;text-align:right"></td><td class="num">${INT(n)}</td>`}
+      <td class="num"><input type="number" data-f="cost" min="0" step="0.01" value="${l.cost}" style="width:100px;text-align:right"></td>
+      <td class="num mut" data-ps>${n&&c?INR(c/n):""}</td>
+      <td>${purLines.length>1?`<button class="linkbtn del" data-rm="${i}">Remove</button>`:""}</td></tr>`; }).join("")+"</tbody>";
+  purTotal();
+}
+function purTotal(){ const t=purLines.reduce((a,l)=>a+(+l.cost||0),0); $("purTotal").textContent=purLines.length>1||t?"Bill total "+INR(t):""; }
+$("purLines").addEventListener("input",e=>{
+  const tr=e.target.closest("[data-i]"), f=e.target.dataset.f; if(!tr||!f) return;
+  const l=purLines[+tr.dataset.i]; l[f]=e.target.value;
+  if(f==="paper"){ l.spp=/master/.test(l.paper)?100:500; drawLines(); return; }
+  if(f==="mode"){ drawLines(); return; }
+  const n=lineSheets(l), c=+l.cost||0; tr.querySelector("[data-ps]").textContent=n&&c?INR(c/n):"";
+  if(f==="packets"||f==="spp") tr.children[4].textContent=INT(n);
+  purTotal();
+});
+$("purLines").addEventListener("click",e=>{ const b=e.target.closest("[data-rm]"); if(b){ purLines.splice(+b.dataset.rm,1); drawLines(); } });
+$("purCancel").onclick=purDone;
+$("purAddLine").onclick=()=>{ purLines.push(newLine()); drawLines(); const sel=$("purLines").querySelectorAll("tbody tr"); sel[sel.length-1].querySelector("select").focus(); };
+$("purSave").onclick=async()=>{
+  const d=formData($("fPur"));
+  d.lines=purLines.map(l=>({id:l.id||0,paper:l.paper,mode:l.mode,packets:l.packets,sheets_per_packet:l.spp,loose_sheets:l.loose,total_cost:l.cost,note:l.note||""}));
+  if(purEdit) d.remove_ids=purEdit.filter(id=>!purLines.some(l=>l.id===id));
+  if(d.lines.some(l=>!(+l.total_cost>0))){ $("purErr").textContent="Enter the amount for every line."; return; }
+  if(await post("/api/purchase",d,$("purErr"))) purDone();
+};
+function jobDone(){ const f=$("fJob"); resetForm(f); f.elements.id.value=""; $("jobTitle").textContent="Add an offset job"; $("jobSave").textContent="Add job"; $("jobCancel").hidden=true; $("jobErr").textContent=""; }
+$("jobCancel").onclick=jobDone;
+$("fJob").addEventListener("submit",async e=>{ e.preventDefault(); if(await post("/api/job",formData(e.target),$("jobErr"))){ jobDone(); if(lastSaved&&lastSaved.id){ openJob=lastSaved.id; render(); $("jobDetail").scrollIntoView({behavior:"smooth",block:"start"}); } } });
+$("jdClose").onclick=()=>{ openJob=null; render(); };
+$("jobDetail").addEventListener("change",e=>{ if(e.target.dataset.sheets){ const el=e.target; el.blur(); post("/api/job_link",{event_id:+el.dataset.sheets,sheets:Math.max(0,Math.round(+el.value)||0)}); } });
+$("fItem").addEventListener("input",()=>{ const f=$("fItem"), a=(+f.elements.qty.value||0)*(+f.elements.rate.value||0); $("itemCalc").textContent=a?"= "+INR(a):""; });
+$("fItem").addEventListener("submit",async e=>{ e.preventDefault(); const d=formData(e.target); d.job_id=openJob; if(await post("/api/job_item",d,$("itemErr"))){ e.target.reset(); $("itemCalc").textContent=""; e.target.elements.title.focus(); } });
+function dueTxt(x){
+  if(x.paid!==0) return x.due_ts?`<span class="mut">Paid${x.paid_ts?" "+fmtD(x.paid_ts):""}</span>`:`<span class="mut">Paid</span>`;
+  if(!x.due_ts) return `<span style="color:var(--warn,#d9a400)">Not paid</span>`;
+  const t0=new Date().setHours(0,0,0,0)/1000;
+  return x.due_ts<t0?`<b class="neg">Overdue · ${fmtD(x.due_ts)}</b>`:`<span style="color:var(--warn,#d9a400)">Due ${fmtD(x.due_ts)}</span>`;
+}
+function expDone(){ const f=$("fExp"); resetForm(f); f.elements.id.value=""; $("expPaid").checked=true; $("expPaid").dataset.touched="";
+  f.querySelectorAll("[data-new]").forEach(l=>l.hidden=false); $("expTitle").textContent="Add an expense"; $("expSave").textContent="Add expense"; $("expCancel").hidden=true; $("expErr").textContent=""; }
+$("expCancel").onclick=expDone;
+function capDone(){ const f=$("fCap"); resetForm(f); f.elements.id.value=""; $("capSave").textContent="Save"; $("capCancel").hidden=true; $("capErr").textContent=""; }
+$("capToggle").onclick=()=>{ $("capBox").hidden=!$("capBox").hidden; };
+$("capCancel").onclick=capDone;
+$("fCap").addEventListener("submit",async e=>{ e.preventDefault(); if(await post("/api/capital",formData(e.target),$("capErr"))) capDone(); });
+$("expPaid").addEventListener("change",()=>$("expPaid").dataset.touched="1");
+$("expDue").addEventListener("input",()=>{ if(!$("expPaid").dataset.touched) $("expPaid").checked=!$("expDue").value; });
+$("fExp").addEventListener("submit",async e=>{ e.preventDefault(); if(await post("/api/expense",formData(e.target),$("expErr"))) expDone(); });
+
+$("rates").addEventListener("input",()=>{ ratesDirty=true; });
+$("paperRates").addEventListener("input",()=>{ ratesDirty=true; });
+$("saveRates").onclick=async()=>{
+  const rates={}, paper={};
+  document.querySelectorAll("#rates input").forEach(i=>rates[i.dataset.k]=parseFloat(i.value)||0);
+  document.querySelectorAll("#paperRates input").forEach(i=>paper[i.dataset.p]=parseFloat(i.value)||0);
+  ratesDirty=false; await post("/api/rates",{rates,paper});
+  $("savedMsg").classList.add("on"); setTimeout(()=>$("savedMsg").classList.remove("on"),1800);
+};
+document.querySelectorAll("#a3def button").forEach(b=>b.onclick=()=>post("/api/settings",{a3_default:b.dataset.v}));
+document.querySelectorAll("#oth1def button").forEach(b=>b.onclick=()=>post("/api/settings",{other1_default:b.dataset.v}));
+document.querySelectorAll("#oth2def button").forEach(b=>b.onclick=()=>post("/api/settings",{other2_default:b.dataset.v}));
+const ymd=d=>d.getFullYear()+String(d.getMonth()+1).padStart(2,"0")+String(d.getDate()).padStart(2,"0");
+$("dFrom").value=$("dTo").value=ymd(new Date()).replace(/(\d{4})(\d{2})(\d{2})/,"$1-$2-$3");
+$("dApply").onclick=()=>{
+  let a=$("dFrom").value, b=$("dTo").value||a; if(!a) return;
+  if(b<a) [a,b]=[b,a];
+  range="d"+a.replace(/-/g,"")+"_"+b.replace(/-/g,""); prevPages={}; prevGroupPages={};
+  document.querySelectorAll("#range button").forEach(x=>x.setAttribute("aria-pressed",String(x.id==="rCustom")));
+  $("rCustom").textContent=(a===b?fmtD(new Date(a+"T12:00").getTime()/1000):fmtD(new Date(a+"T12:00").getTime()/1000)+" – "+fmtD(new Date(b+"T12:00").getTime()/1000));
+  load();
+};
+document.querySelectorAll("#range button").forEach(b=>b.onclick=()=>{
+  if(b.dataset.r==="custom"){ $("dateBox").hidden=!$("dateBox").hidden; if(!$("dateBox").hidden) $("dFrom").focus(); return; }
+  $("dateBox").hidden=true; $("rCustom").textContent="Dates…";
+  range=b.dataset.r; prevPages={};
+  document.querySelectorAll("#range button").forEach(x=>x.setAttribute("aria-pressed",String(x===b))); load();
+});
+function tab(t){ ["D","S","J","E","P"].forEach(k=>$("view"+k).hidden=k!==t);
+  document.querySelectorAll("#tabs button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.t===t))); }
+document.querySelectorAll("#tabs button").forEach(b=>b.onclick=()=>tab(b.dataset.t));
+$("resetBtn").onclick=()=>{ $("resetAsk").hidden=false; $("resetBtn").hidden=true; };
+$("resetNo").onclick=()=>{ $("resetAsk").hidden=true; $("resetBtn").hidden=false; };
+$("resetYes").onclick=async()=>{ prevPages={}; await post("/api/reset",{}); $("resetNo").onclick(); tab("D"); };
+
+load(); setInterval(load,1500);
+})();
+</script>
+</body>
+</html>
