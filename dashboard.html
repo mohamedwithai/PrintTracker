@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#1c5cab">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Print Tracker">
 <title>Print Tracker</title>
 <script>try{const t=localStorage.getItem("pt-theme"); if(t==="light"||t==="dark") document.documentElement.dataset.theme=t;}catch(e){}</script>
 <style>
@@ -121,6 +125,29 @@ td select{max-width:230px;font-size:12.5px}
 .linkbtn.del{color:var(--bad)}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 @media (max-width:900px){.two{grid-template-columns:1fr}}
+/* phone */
+@media (max-width:640px){
+  .wrap{padding:12px 10px 50px}
+  header{gap:8px}
+  html,body{overflow-x:hidden}
+  .card,.form>*{min-width:0}
+  header>div:last-child{width:100%;min-width:0}
+  .tabs{display:flex;flex-wrap:nowrap;overflow-x:auto;width:100%;-webkit-overflow-scrolling:touch}
+  .tabs{min-width:0;flex:1 1 100%}
+  .tabs button{flex:0 0 auto;padding:9px 12px}
+  .seg{flex-wrap:wrap}
+  .totals{grid-template-columns:1fr 1fr;gap:8px}
+  .totals .card .v{font-size:20px}
+  .tiles{grid-template-columns:1fr 1fr;gap:8px}
+  .card{padding:12px}
+  .pnl .r{font-size:13px}
+  .form{grid-template-columns:1fr 1fr}
+  .tablewrap{max-height:none;overflow-x:auto}
+  .tablewrap table{min-width:560px}
+  #dateBox{width:100%}
+  #theme{order:2}
+  input,select,textarea{font-size:16px}   /* stops phone zooming in on tap */
+}
 .card{margin-bottom:0}
 section>.card,section>.two{margin-bottom:14px}
 </style>
