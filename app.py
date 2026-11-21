@@ -156,6 +156,8 @@ def db_init():
             _db.execute("ALTER TABLE events ADD COLUMN job_id INTEGER")
         if "sheets" not in have:
             _db.execute("ALTER TABLE events ADD COLUMN sheets INTEGER")
+        if "personal" not in have:      # printed for the owner himself: not a sale, paper taken out at cost
+            _db.execute("ALTER TABLE events ADD COLUMN personal INTEGER DEFAULT 0")
         pcols = {r[1] for r in _db.execute("PRAGMA table_info(purchases)")}
         if "loose" not in pcols:
             _db.execute("ALTER TABLE purchases ADD COLUMN loose INTEGER DEFAULT 0")
@@ -762,7 +764,9 @@ def api_state(rng, inner=False):
         rates = {r["category"]: float(r["rate"]) for r in _db.execute("SELECT * FROM rates")}
         manual = {r["paper"]: float(r["rate"]) for r in _db.execute("SELECT * FROM paper_rates")}
         rows = [dict(r) for r in _db.execute(
-            "SELECT id, category, pages, job_id, sheets FROM events WHERE ts>=? AND ts<?", (start, endq))]
+            "SELECT id, category, pages, job_id, sheets, personal FROM events WHERE ts>=? AND ts<?", (start, endq))]
+        personal_all = [dict(r) for r in _db.execute(
+            "SELECT id, ts, category, pages, sheets, doc FROM events WHERE personal=1")]
         evs = [dict(r) for r in _db.execute(
             "SELECT * FROM events WHERE ts>=? AND ts<? ORDER BY ts_end DESC, id DESC LIMIT 300", (start, endq))]
         used_all = [dict(r) for r in _db.execute(
@@ -820,7 +824,14 @@ def api_state(rng, inner=False):
         return sh, paper, work
 
     agg = {k: [0, 0, 0, 0.0, 0.0] for k in CAT_KEYS}   # pages, sheets, entries, sales, paper cost
+    pers_pages = 0
+    pers_cost = 0.0
     for r in rows:
+        if r.get("personal"):
+            # own use: no sale, and its paper is money the owner took out, not a business cost
+            sh, _, pc = money(r["category"], r["pages"], r["sheets"])
+            pers_pages += r["pages"]; pers_cost += pc
+            continue
         a = agg.get(r["category"])
         if a is None:
             continue
@@ -857,6 +868,8 @@ def api_state(rng, inner=False):
 
     for e in evs:
         sh, sale, pc = money(e["category"], e["pages"], e.get("sheets"), bool(e.get("job_id")))
+        if e.get("personal"):
+            sale = 0.0
         e.update(sheets=sh, amount=sale, paper_cost=pc, profit=round(sale - pc, 2))
 
     job_ids = {j["id"] for j in jobs}
@@ -907,7 +920,8 @@ def api_state(rng, inner=False):
            "direct": round(direct, 2), "gross": round(gross, 2), "expenses": round(exp, 2),
            "net": round(gross - exp, 2), "purchase_spend": round(spend, 2),
            "receivable": round(recv, 2), "payable": round(pay, 2),
-           "bills_due": round(sum(x["amount"] for x in expenses if x.get("paid") == 0), 2)}
+           "bills_due": round(sum(x["amount"] for x in expenses if x.get("paid") == 0), 2),
+           "personal_pages": pers_pages, "personal_cost": round(pers_cost, 2)}
     # owner's money: cash he put in (lump sums + expenses paid from his own pocket) - cash he took out.
     # This is shown since the start, whatever period is selected; it does not change profit.
     owner = None
@@ -917,10 +931,13 @@ def api_state(rng, inner=False):
         own_pur = [x for x in purchases if x.get("paid_by") == "owner"]
         put_in = (sum(c["amount"] for c in capital if c["kind"] == "in") + sum(x["amount"] for x in own_exp)
                   + sum(x["total_cost"] for x in own_pur))
-        took = sum(c["amount"] for c in capital if c["kind"] == "out")
+        for e in personal_all:
+            e["paper_cost"] = money(e["category"], e["pages"], e["sheets"])[2]
+        took = sum(c["amount"] for c in capital if c["kind"] == "out") + sum(e["paper_cost"] for e in personal_all)
         owner = {"put_in": round(put_in, 2), "took_out": round(took, 2), "net_all": round(net_all, 2),
                  "own_expenses": round(sum(x["amount"] for x in own_exp), 2),
                  "own_purchases": round(sum(x["total_cost"] for x in own_pur), 2),
+                 "personal_prints": [{"ts": e["ts"], "doc": e["doc"], "pages": e["pages"], "cost": e["paper_cost"]} for e in personal_all],
                  "lump_in": round(sum(c["amount"] for c in capital if c["kind"] == "in"), 2),
                  "balance": round(put_in - took + net_all, 2)}
     t = TRACKER
@@ -1005,6 +1022,12 @@ class Handler(BaseHTTPRequestHandler):
                 kv_set("other2_default", data["other2_default"])
             return self._send(200, {"ok": True})
         if path == "/api/event":
+            if "personal" in data:
+                with _db_lock:
+                    _db.execute("UPDATE events SET personal=? WHERE id=?",
+                                (1 if data.get("personal") else 0, int(data.get("id") or 0)))
+                    _db.commit()
+                return self._send(200, {"ok": True})
             if data.get("category") in CAT_KEYS:
                 with _db_lock:
                     _db.execute("UPDATE events SET category=?, edited=1, tray_src='manual' WHERE id=?",

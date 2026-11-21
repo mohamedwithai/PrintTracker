@@ -550,6 +550,7 @@ function render(){
       jp: inR.filter(j=>j.proofs.length).map(j=>[jn(j)+` <span class="mut">${j.proofs.reduce((a,m)=>a+m.pages,0)} pages</span>`, -j.proof_cost]),
       pb: S.purchases.filter(x=>inRange(x.ts)).map(x=>[esc(pl[x.paper]||x.paper)+` <span class="mut">${fmtD(x.ts)} · ${INT(x.sheets)} sheets${x.supplier?" · "+esc(x.supplier):""}</span>`, x.total_cost]),
       rc: S.jobs.filter(j=>j.receivable>0).map(j=>[jn(j)+` <span class="mut">${fmtD(j.ts)}</span>`, j.receivable]),
+      pp: S.events.filter(e=>e.personal).map(e=>[esc(e.doc||"Print")+` <span class="mut">${fmtD(e.ts)} · ${e.pages} page${e.pages>1?"s":""}</span>`,-e.paper_cost]),
       bd: S.expenses.filter(x=>x.paid===0).map(x=>[esc(x.title||"Expense")+(x.due_ts?` <span class="mut">due ${fmtD(x.due_ts)}</span>`:""), x.amount]),
       py: S.jobs.filter(j=>j.payable>0).map(j=>[jn(j)+` <span class="mut">${esc(j.supplier||"")}</span>`, j.payable]),
     };
@@ -576,6 +577,7 @@ function render(){
       <div class="r t" style="font-size:17px;border-top:2px solid var(--ring);margin-top:6px;padding-top:10px"><span>Net ${L.net<0?"loss":"profit"}${pct(L.net)}</span><span class="${sign(L.net)}">${INR(L.net)}</span></div>
       <div class="h">For your information <span class="mut" style="text-transform:none;letter-spacing:0">— not part of profit</span></div>
       ${row("pb","Paper bought in this period (cash out)",L.purchase_spend)}
+      ${L.personal_pages?row("pp","Personal prints (your own use)"+` <span class="mut">${L.personal_pages} pages</span>`,-L.personal_cost):""}
       ${row("rc","Customers still owe you (all jobs)",L.receivable)}
       ${row("py","You still owe offset printers (all jobs)",L.payable)}
       ${row("bd","Expense bills still to pay",L.bills_due||0)}
@@ -591,7 +593,8 @@ function render(){
                    S.purchases.filter(x=>x.paid_by==="owner").forEach(x=>{ const k=x.bill_no?"b:"+x.bill_no+"|"+(x.supplier||"")+"|"+isoD(x.ts):"p:"+x.id;
                      (by[k]=by[k]||{ts:x.ts,label:x.bill_no?"Paper bill "+x.bill_no+(x.supplier?" · "+x.supplier:""):(pl[x.paper]||x.paper)+(x.supplier?" · "+x.supplier:""),amt:0}).amt+=x.total_cost; });
                    return Object.values(by).map(b=>[esc(b.label)+` <span class="mut">${fmtD(b.ts)} · bought with your money</span>`,b.amt]); })()];
-    const dOut=S.capital.filter(c=>c.kind==="out").map(c=>[esc(c.note||"Money taken out")+` <span class="mut">${fmtD(c.ts)}</span>`,-c.amount]);
+    const dOut=[...S.capital.filter(c=>c.kind==="out").map(c=>[esc(c.note||"Money taken out")+` <span class="mut">${fmtD(c.ts)}</span>`,-c.amount]),
+      ...(O.personal_prints||[]).map(p=>[esc(p.doc||"Personal print")+` <span class="mut">${fmtD(p.ts)} · ${p.pages} page${p.pages>1?"s":""} for yourself (paper)</span>`,-p.cost])];
     const back=O.put_in>0?Math.max(0,Math.min(1,O.net_all/O.put_in)):0;
     $("own").innerHTML=`<div>
       ${pnlRow("oi","Money you put in",O.put_in,dIn)}
@@ -692,12 +695,12 @@ function render(){
     $("log").innerHTML=S.events.length?`<thead><tr><th>Time</th><th>Document</th><th>Size</th><th class="num">Pages</th><th class="num">Sale</th><th class="num">Profit</th><th>Category</th></tr></thead><tbody>`+
       S.events.map(e=>`<tr>
         <td style="white-space:nowrap">${fmtT(e.ts)}</td>
-        <td><div class="doc">${esc(e.doc||(e.via==="copy"?"Copy at machine panel":"(document name not captured)"))}</div><div class="mut">${esc(e.app||"")}${e.app?" · ":""}${e.via==="copy"?"Copy":"Print"}${e.job_id?" · for an offset job":""}${e.tray_src==="default"?" · tray assumed":e.tray_src==="driver"?" · tray from driver":e.tray_src==="manual"?" · changed by you":""}</div></td>
+        <td><div class="doc">${esc(e.doc||(e.via==="copy"?"Copy at machine panel":"(document name not captured)"))}</div><div class="mut">${esc(e.app||"")}${e.app?" · ":""}${e.via==="copy"?"Copy":"Print"}${e.personal?" · <b>personal — not a sale</b>":""}${e.job_id?" · for an offset job":""}${e.tray_src==="default"?" · tray assumed":e.tray_src==="driver"?" · tray from driver":e.tray_src==="manual"?" · changed by you":""}</div></td>
         <td>${esc(e.size||"")}</td>
         <td class="num">${INT(e.pages)}</td>
         <td class="num">${INR(e.amount)}</td>
         <td class="num"><span class="${sign(e.profit)}">${INR(e.profit)}</span><div class="mut">paper ${INR(e.paper_cost)}</div></td>
-        <td><select data-id="${e.id}">${opts.map(o=>`<option value="${o[0]}"${o[0]===e.category?" selected":""}>${esc(o[1])}</option>`).join("")}<option value="__del">✕ Did not print — remove</option></select></td>
+        <td><select data-id="${e.id}">${opts.map(o=>`<option value="${o[0]}"${o[0]===e.category?" selected":""}>${esc(o[1])}</option>`).join("")}${e.personal?`<option value="__biz">↩ Business print (charge it)</option>`:`<option value="__pers">★ Personal — printed for myself</option>`}<option value="__del">✕ Did not print — remove</option></select></td>
       </tr>`).join("")+"</tbody>"
       :`<tbody><tr><td class="empty">No prints tracked in this period yet. Send a print — it will appear here within a few seconds.</td></tr></tbody>`;
   }
@@ -795,7 +798,8 @@ $("log").addEventListener("focusin",e=>{ if(e.target.tagName==="SELECT") selOpen
 $("log").addEventListener("focusout",e=>{ if(e.target.tagName==="SELECT") selOpen=false; });
 $("log").addEventListener("change",e=>{
   if(e.target.tagName==="SELECT"){ selOpen=false; e.target.blur();
-    if(e.target.value==="__del"){ if(confirm("Remove this print from the records? Use this only if nothing actually came out of the printer.")) post("/api/delete",{kind:"event",id:+e.target.dataset.id}); else render(); }
+    if(e.target.value==="__pers"||e.target.value==="__biz"){ post("/api/event",{id:+e.target.dataset.id,personal:e.target.value==="__pers"}); }
+    else if(e.target.value==="__del"){ if(confirm("Remove this print from the records? Use this only if nothing actually came out of the printer.")) post("/api/delete",{kind:"event",id:+e.target.dataset.id}); else render(); }
     else post("/api/event",{id:+e.target.dataset.id,category:e.target.value}); }
 });
 document.addEventListener("click",e=>{
